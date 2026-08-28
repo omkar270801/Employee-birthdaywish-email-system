@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("ADMIN")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Employee {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  department   String
+  designation  String
+  dateOfBirth  DateTime
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  emailLogs    EmailLog[]
+
+  @@index([dateOfBirth])
+  @@index([isActive])
+}
+
+model EmailTemplate {
+  id        String     @id @default(cuid())
+  name      String
+  subject   String
+  body      String
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  emailLogs EmailLog[]
+
+  @@index([isActive])
+}
+
+model EmailLog {
+  id             String    @id @default(cuid())
+  employeeId     String
+  templateId     String
+  birthdayDate   DateTime
+  recipientEmail String
+  subject        String
+  status         String
+  sentAt         DateTime?
+  errorMessage   String?
+  createdAt      DateTime  @default(now())
+
+  employee Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  template EmailTemplate @relation(fields: [templateId], references: [id])
+
+  @@unique([employeeId, birthdayDate])
+  @@index([birthdayDate])
+  @@index([status])
+}

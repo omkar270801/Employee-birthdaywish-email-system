@@ -1,0 +1,139 @@
+import { prisma } from '../utils/prisma';
+import { sendBirthdayEmail } from './email.service';
+import { getActiveTemplate } from './template.service';
+import { getTodayBirthdays } from './employee.service';
+
+const matchesBirthday = (dateOfBirth: Date, targetMonth: number, targetDay: number): boolean => {
+  const dob = new Date(dateOfBirth);
+  return dob.getMonth() === targetMonth && dob.getDate() === targetDay;
+};
+
+export const birthdayJob = async () => {
+  console.log('Starting birthday job...');
+
+  try {
+    const today = new Date();
+    const month = today.getMonth();
+    const day = today.getDate();
+
+    const employees = await prisma.employee.findMany({
+      where: {
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        department: true,
+        designation: true,
+        dateOfBirth: true,
+      },
+    });
+
+    const birthdayEmployees = employees.filter(emp => matchesBirthday(emp.dateOfBirth, month, day));
+
+    if (birthdayEmployees.length === 0) {
+      console.log('No birthdays today.');
+      return { success: true, sent: 0, failed: 0 };
+    }
+
+    const template = await getActiveTemplate();
+    if (!template) {
+      console.log('No active email template found.');
+      return { success: false, error: 'No active template' };
+    }
+
+    let sent = 0;
+    let failed = 0;
+
+    for (const employee of birthdayEmployees) {
+      const result = await sendBirthdayEmail(employee, template);
+      if (result.success) {
+        sent++;
+      } else {
+        failed++;
+      }
+    }
+
+    console.log(`Birthday job completed: ${sent} sent, ${failed} failed`);
+    return { success: true, sent, failed };
+  } catch (error: any) {
+    console.error('Birthday job error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getEmailHistory = async (filters?: {
+  startDate?: Date;
+  endDate?: Date;
+  status?: string;
+  employeeId?: string;
+}) => {
+  const where: any = {};
+
+  if (filters?.startDate && filters?.endDate) {
+    where.createdAt = {
+      gte: filters.startDate,
+      lte: filters.endDate,
+    };
+  }
+  if (filters?.status) {
+    where.status = filters.status;
+  }
+  if (filters?.employeeId) {
+    where.employeeId = filters.employeeId;
+  }
+
+  return prisma.emailLog.findMany({
+    where,
+    include: {
+      employee: {
+        select: {
+          name: true,
+          email: true,
+          department: true,
+        },
+      },
+      template: {
+        select: {
+          name: true,
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 100,
+  });
+};
+
+export const deleteEmailLog = async (logId: string) => {
+  await prisma.emailLog.delete({
+    where: { id: logId },
+  });
+  return { success: true };
+};
+
+export const sendBirthdayEmailToEmployee = async (employeeId: string) => {
+  const employee = await prisma.employee.findUnique({
+    where: { id: employeeId },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      department: true,
+      designation: true,
+      dateOfBirth: true,
+    },
+  });
+
+  if (!employee) {
+    return { success: false, error: 'Employee not found' };
+  }
+
+  const template = await getActiveTemplate();
+  if (!template) {
+    return { success: false, error: 'No active email template found' };
+  }
+
+  const result = await sendBirthdayEmail(employee, template);
+  return result;
+};

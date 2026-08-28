@@ -1,0 +1,14 @@
+{
+  "name": "birthday-wish-email-system",
+  "version": "1.0.0",
+  "description": "Employee Birthday Wish Email System for IIM",
+  "scripts": {
+    "dev": "concurrently \"npm.cmd --prefix server run dev\" \"npm.cmd --prefix client run dev\"",
+    "dev:server": "npm.cmd --prefix server run dev",
+    "dev:client": "npm.cmd --prefix client run dev",
+    "install:all": "npm.cmd --prefix server install && npm.cmd --prefix client install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
