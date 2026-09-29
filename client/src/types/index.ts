@@ -9,7 +9,6 @@ export interface Employee {
   id: string;
   name: string;
   email: string;
-  department: string;
   designation: string;
   dateOfBirth: string;
   isActive: boolean;
@@ -54,7 +53,6 @@ export interface DashboardStats {
     id: string;
     name: string;
     email: string;
-    department: string;
     designation: string;
     dateOfBirth: string;
     emailStatus: string;

@@ -123,11 +123,11 @@ export const api = {
   },
 
   settings: {
-    getStats: () => request('/settings/stats'),
-    cleanup: (data: any) => request('/settings/cleanup', {
+    getStats: (tokenKey = 'token') => request('/settings/stats', {}, tokenKey),
+    cleanup: (data: any, tokenKey = 'token') => request('/settings/cleanup', {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
+    }, tokenKey),
   },
 
   developer: {

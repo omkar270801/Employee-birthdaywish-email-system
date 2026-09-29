@@ -6,6 +6,7 @@ export function Employees() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [formData, setFormData] = useState({
@@ -100,6 +101,15 @@ export function Employees() {
     });
   };
 
+  const filteredEmployees = employees.filter(emp => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+
+    return [emp.name, emp.email, emp.designation].some(value =>
+      value.toLowerCase().includes(query)
+    );
+  });
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -141,6 +151,17 @@ export function Employees() {
       )}
 
       <div className="card overflow-hidden">
+        <div className="border-b border-slate-100 bg-white px-6 py-4">
+          <label htmlFor="employee-search" className="sr-only">Search employees</label>
+          <input
+            id="employee-search"
+            type="search"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by name, email, or designation"
+            className="input max-w-md"
+          />
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-100">
             <thead className="bg-slate-50/50">
@@ -154,7 +175,7 @@ export function Employees() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {employees.map(emp => (
+              {filteredEmployees.map(emp => (
                 <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{emp.name}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{emp.email}</td>
@@ -180,10 +201,12 @@ export function Employees() {
                   </td>
                 </tr>
               ))}
-              {employees.length === 0 && (
+              {filteredEmployees.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
-                    No employees found. Add your first employee to get started.
+                    {employees.length === 0
+                      ? 'No employees found. Add your first employee to get started.'
+                      : 'No employees match your search.'}
                   </td>
                 </tr>
               )}

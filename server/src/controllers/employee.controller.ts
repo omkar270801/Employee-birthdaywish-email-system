@@ -34,7 +34,7 @@ export const getEmployee = async (req: AuthRequest, res: Response) => {
 
 export const createEmployee = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, email, department = 'General', designation, dateOfBirth } = req.body;
+    const { name, email, designation, dateOfBirth } = req.body;
 
     const existingEmail = await employeeService.getEmployeeByEmail(email);
     if (existingEmail) {
@@ -44,7 +44,7 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
     const employee = await employeeService.createEmployee({
       name,
       email,
-      department,
+      department: 'General',
       designation,
       dateOfBirth: new Date(dateOfBirth),
     });
@@ -62,7 +62,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: 'Employee not found' });
     }
 
-    const { email, department = 'General', ...updateData } = req.body;
+    const { email, ...updateData } = req.body;
 
     if (email && email !== employee.email) {
       const existingEmail = await employeeService.getEmployeeByEmail(email);
@@ -74,7 +74,7 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
     const updated = await employeeService.updateEmployee(req.params.id, {
       ...updateData,
       ...(email && { email }),
-      department,
+      department: 'General',
       ...(req.body.dateOfBirth && { dateOfBirth: new Date(req.body.dateOfBirth) }),
     });
 
@@ -196,7 +196,8 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
       let dobDate: Date | null = null;
 
       if (dobRaw === undefined || dobRaw === null || String(dobRaw).trim() === '') {
-        dobDate = new Date();
+        // Allow missing DOB - set to null
+        dobDate = null;
       } else if (dobRaw instanceof Date) {
         dobDate = new Date(dobRaw);
       } else if (typeof dobRaw === 'number') {
@@ -220,25 +221,21 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
           }
         }
         if (!dobDate || isNaN(dobDate.getTime())) {
-          errors.push(`Row ${rowNumber}: Invalid DOB format "${dobString}", use DD/MM/YYYY`);
-          continue;
+          // Allow invalid DOB format - set to null
+          dobDate = null;
         }
-      }
-
-      if (!dobDate || isNaN(dobDate.getTime())) {
-        errors.push(`Row ${rowNumber}: Invalid DOB`);
-        continue;
       }
 
       let finalName = name;
       let finalEmail = cleanedEmail;
 
       if (!finalName && !hasValidEmail) {
-        finalName = '';
-        finalEmail = `row-${rowNumber}@unknown.local`;
+        // If both name and email are missing, skip the row
+        continue;
       } else if (!finalName && hasValidEmail) {
         finalName = cleanedEmail.split('@')[0];
       } else if (finalName && !hasValidEmail) {
+        // Generate placeholder email if name exists but email is missing
         finalEmail = `${finalName.toLowerCase().replace(/[^a-z0-9]+/g, '.')}@unknown.local`;
       }
 

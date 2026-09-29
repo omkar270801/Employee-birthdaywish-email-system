@@ -6,6 +6,7 @@ const navItems = [
   { path: '/developer/dashboard', label: 'Health', icon: '❤️' },
   { path: '/developer/dashboard', label: 'Scheduler', icon: '⏰' },
   { path: '/developer/dashboard', label: 'System Logs', icon: '📋' },
+  { path: '/developer/settings', label: 'Settings', icon: '⚙️' },
 ];
 
 export function DeveloperLayout({ children }: { children: React.ReactNode }) {

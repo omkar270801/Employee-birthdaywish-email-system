@@ -17,7 +17,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
 
     const allActiveEmployees = await prisma.employee.findMany({
       where: { isActive: true },
-      select: { id: true, name: true, email: true, department: true, designation: true, dateOfBirth: true },
+      select: { id: true, name: true, email: true, designation: true, dateOfBirth: true },
     });
 
     const todayBirthdayEmployees = allActiveEmployees.filter(emp =>

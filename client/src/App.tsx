@@ -49,6 +49,7 @@ function App() {
       <Route path="/settings" element={<ProtectedRoute><Layout><Settings /></Layout></ProtectedRoute>} />
       <Route path="/developer/login" element={isDeveloperAuthenticated ? <Navigate to="/developer/dashboard" replace /> : <DeveloperLogin onLogin={handleDeveloperLogin} />} />
       <Route path="/developer/dashboard" element={<ProtectedDeveloperRoute><DeveloperLayout><DeveloperDashboard /></DeveloperLayout></ProtectedDeveloperRoute>} />
+      <Route path="/developer/settings" element={<ProtectedDeveloperRoute><DeveloperLayout><Settings isDeveloper /></DeveloperLayout></ProtectedDeveloperRoute>} />
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );

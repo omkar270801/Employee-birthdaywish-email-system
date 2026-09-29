@@ -6,13 +6,15 @@ export const runBirthdayJob = async () => {
 };
 
 export const startScheduler = () => {
-  const checkTime = process.env.BIRTHDAY_CHECK_TIME;
-  if (!checkTime) {
-    console.log('Birthday job not scheduled (BIRTHDAY_CHECK_TIME not set)');
+  const checkTime = process.env.BIRTHDAY_CHECK_TIME || '08:00';
+  const timeParts = checkTime.match(/^(\d{1,2}):(\d{2})$/);
+  const hours = timeParts ? Number(timeParts[1]) : NaN;
+  const minutes = timeParts ? Number(timeParts[2]) : NaN;
+
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+    console.error(`Invalid BIRTHDAY_CHECK_TIME "${checkTime}". Expected HH:MM.`);
     return;
   }
-
-  const [hours, minutes] = checkTime.split(':').map(Number);
 
   const scheduleNextRun = () => {
     const now = new Date();

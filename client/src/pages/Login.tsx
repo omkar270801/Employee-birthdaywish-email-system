@@ -14,6 +14,7 @@ export function Login({ onLogin }: LoginProps) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
+
     setLoading(true);
 
     try {

@@ -3,7 +3,8 @@ import { api } from '../services/api';
 
 type CleanupType = 'email_logs' | 'inactive_employees' | 'all_logs';
 
-export function Settings() {
+export function Settings({ isDeveloper = false }: { isDeveloper?: boolean }) {
+  const tokenKey = isDeveloper ? 'developerToken' : 'token';
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [cleanupType, setCleanupType] = useState<CleanupType>('email_logs');
@@ -17,7 +18,7 @@ export function Settings() {
 
   const loadStats = async () => {
     try {
-      const response = await api.settings.getStats();
+      const response = await api.settings.getStats(tokenKey);
       setStats(response.data);
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message });
@@ -35,7 +36,7 @@ export function Settings() {
     setMessage(null);
 
     try {
-      const response = await api.settings.cleanup({ type: cleanupType, olderThanDays });
+      const response = await api.settings.cleanup({ type: cleanupType, olderThanDays }, tokenKey);
       setMessage({ type: 'success', text: response.message || 'Cleanup completed' });
       await loadStats();
     } catch (err: any) {
