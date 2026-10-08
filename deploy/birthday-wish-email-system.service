@@ -1,0 +1,26 @@
+[Unit]
+Description=Birthday Wish Email System API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=birthdayapp
+Group=birthdayapp
+WorkingDirectory=/opt/birthday-wish-email-system/server
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/birthday-wish-email-system/server/dist/server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SyslogIdentifier=birthday-wish-email-system
+
+[Install]
+WantedBy=multi-user.target

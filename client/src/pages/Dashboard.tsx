@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { DashboardStats } from '../types';
+import { DashboardStats, UpcomingBirthday } from '../types';
 
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [upcomingBirthdays, setUpcomingBirthdays] = useState<UpcomingBirthday[]>([]);
+  const [upcomingLoading, setUpcomingLoading] = useState(true);
+  const [upcomingError, setUpcomingError] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [sendingId, setSendingId] = useState<string | null>(null);
@@ -11,6 +14,7 @@ export function Dashboard() {
 
   useEffect(() => {
     loadStats();
+    loadUpcomingBirthdays();
   }, []);
 
   const loadStats = async () => {
@@ -21,6 +25,26 @@ export function Dashboard() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadUpcomingBirthdays = async () => {
+    try {
+      const response = await api.birthdays.getUpcoming(8);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 8);
+      setUpcomingBirthdays(response.data.filter((birthday: UpcomingBirthday) => {
+        const birthdayDate = new Date(birthday.date);
+        return birthdayDate >= tomorrow && birthdayDate < nextWeek;
+      }));
+    } catch (err: any) {
+      setUpcomingError(err.message || 'Unable to load upcoming birthdays');
+    } finally {
+      setUpcomingLoading(false);
     }
   };
 
@@ -123,6 +147,61 @@ export function Dashboard() {
           </div>
         </div>
       )}
+
+      <section className="card overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">📅 Upcoming Birthdays</h2>
+            <p className="mt-1 text-sm text-slate-500">Your schedule for the next 7 days</p>
+          </div>
+          {!upcomingLoading && !upcomingError && (
+            <span className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+              {upcomingBirthdays.length} {upcomingBirthdays.length === 1 ? 'birthday' : 'birthdays'}
+            </span>
+          )}
+        </div>
+
+        {upcomingLoading ? (
+          <div className="flex items-center gap-3 px-6 py-8 text-sm text-slate-500">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-600 border-r-transparent" />
+            Loading upcoming birthdays...
+          </div>
+        ) : upcomingError ? (
+          <p className="px-6 py-8 text-sm text-red-600">{upcomingError}</p>
+        ) : upcomingBirthdays.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-xl">🎈</div>
+            <p className="text-sm font-medium text-slate-700">No birthdays coming up this week</p>
+            <p className="mt-1 text-sm text-slate-500">The schedule will appear here when a birthday is near.</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {upcomingBirthdays.map(({ employee, date }) => {
+              const birthdayDate = new Date(date);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const daysAway = Math.round((birthdayDate.getTime() - today.getTime()) / 86400000);
+
+              return (
+                <li key={`${employee.id}-${date}`} className="flex items-center gap-4 px-6 py-4 transition-colors hover:bg-slate-50/70">
+                  <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg border border-indigo-100 bg-indigo-50 text-indigo-700">
+                    <span className="text-[10px] font-bold uppercase">{birthdayDate.toLocaleDateString(undefined, { month: 'short' })}</span>
+                    <span className="text-xl font-bold leading-5">{birthdayDate.getDate()}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-900">{employee.name}</p>
+                    <p className="mt-1 truncate text-sm text-slate-500">{employee.designation || employee.department || employee.email}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-medium text-slate-700">{birthdayDate.toLocaleDateString(undefined, { weekday: 'long' })}</p>
+                    <p className="mt-1 text-xs text-slate-500">{daysAway === 1 ? 'Tomorrow' : `In ${daysAway} days`}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

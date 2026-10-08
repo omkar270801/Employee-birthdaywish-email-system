@@ -72,9 +72,10 @@ if (!checkTimeParts || Number(checkTimeParts[1]) > 23 || Number(checkTimeParts[2
 
 const PORT = Number(process.env.PORT || 5001);
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) throw new Error('PORT must be a valid TCP port');
+const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Server running on ${HOST}:${PORT}`);
 });
 
 startScheduler();

@@ -1,108 +1,199 @@
-# Go-Live Runbook
+# Linux VM Production Deployment
 
-This runbook covers production configuration and the security fixes applied to this application. Do not expose the service publicly until each required gate below is complete.
+This guide deploys the application to a single Ubuntu 22.04/24.04 VM using Node.js, PostgreSQL, systemd, and Nginx. Nginx serves the built React app and terminates HTTPS; the API listens only on loopback. Do not expose PostgreSQL or port 5001 to the internet.
 
-## Requirements
+## 1. Provision the VM
 
-- Node.js 20 or newer and PostgreSQL 12 or newer.
-- A production database with automated backups and restore testing.
-- A TLS-terminating reverse proxy or hosting platform for the browser app and API.
-- A production SMTP account with a dedicated application password or equivalent credential.
+Use a supported Ubuntu LTS VM with a DNS name and a static public IP. Allow inbound SSH, HTTP, and HTTPS in the cloud firewall. Install Node.js 22 LTS, PostgreSQL, Nginx, Git, and Certbot:
 
-The Vite development server is not a production web server. Build the client and serve `client/dist` from a production static host; proxy `/api` to the server on port `5001`.
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl git nginx postgresql postgresql-contrib
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs certbot python3-certbot-nginx
+node --version
+npm --version
+```
 
-## Environment
+Create a dedicated, unprivileged runtime user and database:
 
-Create `server/.env` from `.env.example` for local setup. Production secrets should be provided by the deployment platform's secret manager, not committed to source control.
+```bash
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin birthdayapp
+sudo -u postgres createuser --pwprompt birthdayapp
+sudo -u postgres createdb --owner=birthdayapp birthday_wish_db
+```
 
-Required production values:
+Use a unique database password. The database URL must use `127.0.0.1` and URL-encode any reserved characters in the password. Do not open PostgreSQL port 5432 in either the VM firewall or cloud firewall.
 
-| Variable | Requirement |
-| --- | --- |
-| `NODE_ENV` | Set to `production`. |
-| `DATABASE_URL` | PostgreSQL connection string with least-privilege database credentials. |
-| `JWT_SECRET` | Unique random secret, at least 32 characters; do not reuse the developer secret. |
-| `CLIENT_URL` | Exact HTTPS origin, without a path or trailing slash. CORS allows this origin only. |
-| `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | Valid SMTP host, dedicated account credentials, and sender identity. |
-| `SMTP_PORT` | Usually `587` for STARTTLS or `465` for implicit TLS. |
-| `SMTP_SECURE` | `false` for port 587, `true` for port 465. |
-| `PORT` | API port; defaults to `5001`. |
-| `BIRTHDAY_CHECK_TIME` | Local server time in 24-hour `HH:MM` format. Defaults to `08:00`. |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | Set for initial seed or explicit password rotation. Password must be at least 12 characters. |
+## 2. Install the Application
 
-If enabling the developer portal, configure all three values: `DEVELOPER_EMAIL`, `DEVELOPER_PASSWORD`, and a unique `DEVELOPER_JWT_SECRET` of at least 32 characters. The developer secret must differ from `JWT_SECRET`.
+Clone the repository into the production path, then assign it to the runtime user:
 
-Generate each JWT secret independently on a trusted machine:
+```bash
+sudo git clone <repository-url> /opt/birthday-wish-email-system
+sudo chown -R birthdayapp:birthdayapp /opt/birthday-wish-email-system
+```
 
-```powershell
+Create the server environment file from the checked-in example and restrict its permissions:
+
+```bash
+sudo -u birthdayapp cp /opt/birthday-wish-email-system/.env.example /opt/birthday-wish-email-system/server/.env
+sudo chmod 600 /opt/birthday-wish-email-system/server/.env
+sudoedit /opt/birthday-wish-email-system/server/.env
+```
+
+Set production values. Do not leave example credentials in place:
+
+```env
+NODE_ENV=production
+DATABASE_URL="postgresql://birthdayapp:<url-encoded-password>@127.0.0.1:5432/birthday_wish_db?schema=public"
+JWT_SECRET="<unique-random-secret-at-least-32-characters>"
+CLIENT_URL="https://birthdays.example.org"
+PORT=5001
+HOST=127.0.0.1
+TRUST_PROXY_HOPS=1
+BIRTHDAY_CHECK_TIME=08:00
+SMTP_HOST=smtp.example.org
+SMTP_PORT=587
+SMTP_USER=birthday-sender@example.org
+SMTP_PASSWORD=<smtp-credential>
+SMTP_FROM="IIM Birthday Wishes <birthday-sender@example.org>"
+SMTP_SECURE=false
+ADMIN_EMAIL=admin@example.org
+ADMIN_PASSWORD=<unique-password-at-least-12-characters>
+```
+
+`CLIENT_URL` must exactly match the public HTTPS origin. Use `SMTP_SECURE=true` with implicit TLS on port 465; use `false` with STARTTLS on port 587. Keep the VM timezone set to the institution's intended timezone because birthdays and the scheduler use local time.
+
+Generate secrets on a trusted machine and enter them directly into the server environment file:
+
+```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-Do not paste real secrets into tickets, source files, or chat. Keep the server's operating-system timezone set to the institution's intended timezone; birthday matching and the scheduler use local time. Configure `TRUST_PROXY_HOPS` only when behind a known reverse proxy, with the exact number of trusted proxy hops.
+If the optional developer portal is enabled, set `DEVELOPER_EMAIL`, `DEVELOPER_PASSWORD`, and a distinct strong `DEVELOPER_JWT_SECRET` together. Leave all three unset otherwise.
 
-## First Deployment
+## 3. Build, Migrate, and Seed
 
-From the repository root, install locked dependencies and build both applications:
+Run the commands as the runtime user. Prisma reads `server/.env` from the server working directory.
 
-```powershell
-npm ci --prefix server
-npm ci --prefix client
-npm --prefix server run build
-npm --prefix client run build
+```bash
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/server && npm ci && npm run prisma:generate && npx prisma migrate deploy && npm run prisma:seed && npm run build'
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/client && npm ci && npm run build'
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/server && npm prune --omit=dev'
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/client && npm prune --omit=dev'
 ```
 
-Before starting the API, apply the checked-in database migrations and create the administrator account. Run these commands from `server/` so Prisma loads `server/.env`:
+The seed creates the configured administrator only when that email does not already exist. It never resets an existing password. After initial seeding, remove `ADMIN_PASSWORD` from `server/.env`; keep `ADMIN_EMAIL`. To intentionally rotate the password later, set the new value temporarily, reinstall the server's development tools, run the password command, then remove the password and prune development packages again:
 
-```powershell
-npx prisma generate
-npx prisma migrate deploy
-npx prisma db seed
+```bash
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/server && npm ci && npm run prisma:admin-password'
 ```
 
-The seed command creates a missing account from `ADMIN_EMAIL` and `ADMIN_PASSWORD`; it does not overwrite an existing account. The old public `/api/auth/seed` endpoint has been removed. If an existing database still has the old `admin123` password, rotate it before exposing the app:
+After deleting `ADMIN_PASSWORD` from `server/.env`, remove development packages again:
 
-```powershell
-npm run prisma:admin-password
+```bash
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/server && npm prune --omit=dev'
 ```
 
-The command updates only the account named by `ADMIN_EMAIL`; it requires a password of at least 12 characters and never prints the password.
+The API requires `JWT_SECRET` and, in production, database, SMTP, and HTTPS client-origin settings. The server defaults to `127.0.0.1` in production; keep `HOST=127.0.0.1` so only the local reverse proxy can reach it.
 
-Start the compiled API from `server/` with `npm start`, and serve the generated `client/dist` from the production web host. Terminate HTTPS at the trusted proxy, forward `/api` to the API, and do not expose the development server or database port publicly.
+## 4. Configure systemd
 
-## Security Controls
+Install the supplied service unit and start the API:
 
-- Admin authentication accepts only structurally valid `ADMIN` tokens. Developer tokens use a separate signing secret and cannot authenticate to the admin API.
-- Developer access is optional. Its token can view developer diagnostics, but destructive database cleanup is administrator-only.
-- Login endpoints are limited to 10 attempts per IP per 15 minutes per server process. The default limiter store is in-memory; multi-instance deployments need a shared rate-limit store and correctly configured proxy trust.
-- API responses include Helmet security headers, JSON request bodies are limited to 100 KB, employee spreadsheets are limited to 5 MB and 5,000 rows, and CORS is restricted to `CLIENT_URL`.
-- Spreadsheet uploads accept `.xlsx` only and use ExcelJS. Do not reintroduce the unmaintained `xlsx` package; its npm release has known vulnerabilities.
-- Admin and developer JWTs expire after eight hours. The browser currently stores bearer tokens in `localStorage`; serve the client with a strict Content Security Policy and avoid loading untrusted scripts. An HttpOnly-cookie migration remains a worthwhile future hardening task.
-- Run `npm audit` from both `server/` and `client/` before every release. The dependency trees were clean after these changes; recheck after updates.
+```bash
+sudo cp /opt/birthday-wish-email-system/deploy/birthday-wish-email-system.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now birthday-wish-email-system
+sudo systemctl status birthday-wish-email-system
+sudo journalctl -u birthday-wish-email-system -n 100 --no-pager
+```
 
-## Birthday Email Behavior
+The unit runs as `birthdayapp`, restarts on failure, and reads secrets from `server/.env` through the application's dotenv initialization. Logs go to the system journal. Check `ExecStart` and `WorkingDirectory` in the unit if you install the repository somewhere other than `/opt/birthday-wish-email-system`.
 
-- The scheduled and manual batch jobs process active employees whose birthday matches the server's local calendar date. A single-employee send is also restricted to an active employee whose birthday is today.
-- Each employee/day send reserves a unique log row before contacting SMTP. Failed attempts can be retried; concurrent attempts are rejected. A `PROCESSING` attempt older than 15 minutes can be reclaimed.
-- Email delivery cannot be made exactly-once across an SMTP provider and the database. If SMTP accepts a message and the API process crashes before recording `SENT`, reclaiming the stale attempt can send a duplicate. Monitor `PROCESSING` and `FAILED` rows and coordinate with the SMTP provider for stronger idempotency if available.
-- Keep successful and in-progress email logs. The API refuses to delete those records because their unique keys prevent same-day duplicate sends.
-- The in-process scheduler requires the API process to remain running. Do not run multiple scheduler instances unless the database lease behavior and operational monitoring are understood. A process restart recalculates the next local run; it does not replay a missed run automatically.
+Confirm the API is local before configuring the proxy:
 
-## Release Smoke Test
+```bash
+curl -fsS http://127.0.0.1:5001/api/health
+```
 
-1. Confirm production startup refuses missing/weak JWT secrets and incomplete developer credentials.
-2. Confirm `GET /api/health` responds through the HTTPS proxy and unrelated browser origins cannot read API responses.
-3. Sign in with the rotated administrator credentials; verify a developer token receives `403` on an admin endpoint.
-4. Upload a small valid `.xlsx` file, then verify malformed email, missing DOB, invalid dates, an invalid worksheet, and an oversized file are rejected without partial batch failure.
-5. Send a test email to an approved test mailbox; confirm the sender, TLS mode, and delivery.
-6. Run the birthday batch with a controlled test employee whose birthday is today. Trigger it a second time and verify no second email is sent. Verify an inactive or non-birthday employee cannot use the one-person send endpoint.
-7. Verify a failed SMTP attempt can be retried and a concurrent attempt does not send a second message.
-8. Confirm the scheduler's next-run time matches the institution's timezone and operating window.
-9. Restore a recent database backup in a non-production environment and verify employee records, templates, and email history.
+## 5. Configure Nginx and HTTPS
 
-## Operations
+Replace `birthdays.example.org` in the supplied site configuration with the real DNS name. Install and enable it:
 
-- Alert on API process exits, database connectivity, SMTP delivery failures, stale `PROCESSING` rows, and missed scheduler runs.
-- Restrict access to database backups and email history; employee names, dates of birth, and addresses are personal data.
-- Use the cleanup controls cautiously. They permanently delete records; take a backup before administrative cleanup.
-- Rotate JWT, database, and SMTP secrets through the deployment secret manager. Rotating either JWT signing secret invalidates existing tokens.
-- Keep the API behind HTTPS and a firewall. The public health endpoint reports only basic API status; use authenticated developer diagnostics for deeper checks.
+```bash
+sudo cp /opt/birthday-wish-email-system/deploy/nginx.conf /etc/nginx/sites-available/birthday-wish-email-system
+sudoedit /etc/nginx/sites-available/birthday-wish-email-system
+sudo ln -s /etc/nginx/sites-available/birthday-wish-email-system /etc/nginx/sites-enabled/birthday-wish-email-system
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+Point the DNS A/AAAA record at the VM, then issue the certificate and enable HTTPS:
+
+```bash
+sudo certbot --nginx -d birthdays.example.org
+sudo certbot renew --dry-run
+```
+
+Allow only SSH and web traffic in the host firewall; never allow ports 5001 or 5432 publicly:
+
+```bash
+sudo ufw allow OpenSSH
+sudo ufw allow 'Nginx Full'
+sudo ufw enable
+sudo ufw status
+```
+
+Use the equivalent network firewall rules if UFW is not appropriate for the VM. The Nginx template serves the SPA, proxies `/api/` to loopback, limits request bodies to 6 MB, and sets a same-origin Content Security Policy. Revisit that policy if the frontend later loads scripts, fonts, images, or API calls from another origin.
+
+## 6. Verify the Deployment
+
+1. Check `https://birthdays.example.org/api/health` and confirm the certificate is valid.
+2. Sign in with the seeded administrator and confirm a wrong password is rejected.
+3. Confirm the application is inaccessible directly on public port 5001 and PostgreSQL port 5432.
+4. Send a test message to an approved mailbox and verify SMTP delivery.
+5. Upload a small valid `.xlsx` file; verify invalid input is rejected.
+6. Test birthday processing with a controlled employee and verify a repeated trigger does not send a duplicate.
+7. Confirm `BIRTHDAY_CHECK_TIME` matches the VM's timezone and inspect `journalctl` for scheduler startup.
+8. Verify the database backup and restore procedure before storing production employee data.
+
+## Release and Rollback
+
+Take a database backup before applying migrations. Then deploy the intended release and rebuild from its lockfiles:
+
+```bash
+sudo systemctl stop birthday-wish-email-system
+cd /opt/birthday-wish-email-system
+sudo -u birthdayapp git fetch --tags
+sudo -u birthdayapp git checkout <release-tag>
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/server && npm ci && npm run prisma:generate && npx prisma migrate deploy && npm run build'
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/client && npm ci && npm run build'
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/server && npm prune --omit=dev'
+sudo -u birthdayapp -- sh -c 'cd /opt/birthday-wish-email-system/client && npm prune --omit=dev'
+sudo systemctl start birthday-wish-email-system
+sudo systemctl status birthday-wish-email-system
+```
+
+Do not use `prisma migrate dev` in production. Roll back application code only when the deployed schema remains compatible; database migrations may not be reversible. Restore a database backup only under an approved recovery procedure.
+
+## Backups and Ongoing Operations
+
+Create a restricted backup directory and take a PostgreSQL custom-format backup before releases and on a regular schedule:
+
+```bash
+sudo install -d -o postgres -g postgres -m 0700 /var/backups/birthday-wish-email
+sudo -u postgres sh -c 'pg_dump -Fc birthday_wish_db > /var/backups/birthday-wish-email/backup-$(date +%F-%H%M%S).dump'
+```
+
+Copy backups to encrypted off-VM storage, define a retention policy, and regularly test restoring into a separate database/VM. Monitor systemd restarts, SMTP failures, failed/stale `PROCESSING` email logs, disk space, database backups, and missed scheduler runs.
+
+## Production Limitations to Account For
+
+- Run one API instance: the daily scheduler is in-process, and login rate limits use per-process memory. Multiple instances need coordinated scheduling and a shared rate-limit store.
+- The browser stores bearer tokens in `localStorage`; the reverse proxy CSP reduces script sources but does not provide the isolation of HttpOnly cookies.
+- SMTP and PostgreSQL cannot guarantee exactly-once delivery together. A crash after SMTP accepts a message but before the database records success can lead to a retry and duplicate.
+- A process restart recalculates the next scheduled run; it does not automatically replay a missed run.
+- `GET /api/health` is a basic API liveness response, not a database or SMTP readiness probe.
+- Production dependencies currently pass `npm audit --omit=dev` in both projects. The full client development dependency audit reports high/moderate advisories in Tailwind CSS 3's build-time dependency tree; there is no compatible patched Tailwind 3 release in the current lockfile. Do not use `npm audit fix --force` as it upgrades Tailwind to v4; plan and test that migration separately. The deployment steps prune dev dependencies after building so those packages are not retained on the VM.
