@@ -2,19 +2,18 @@ import { prisma } from '../utils/prisma';
 import { sendBirthdayEmail } from './email.service';
 import { getActiveTemplate } from './template.service';
 import { getTodayBirthdays } from './employee.service';
+import { getDatePartsInTimeZone } from '../utils/timezone';
 
 const matchesBirthday = (dateOfBirth: Date, targetMonth: number, targetDay: number): boolean => {
-  const dob = new Date(dateOfBirth);
-  return dob.getMonth() === targetMonth && dob.getDate() === targetDay;
+  const dob = getDatePartsInTimeZone(dateOfBirth);
+  return dob.month === targetMonth && dob.day === targetDay;
 };
 
 export const birthdayJob = async () => {
   console.log('Starting birthday job...');
 
   try {
-    const today = new Date();
-    const month = today.getMonth();
-    const day = today.getDate();
+    const { month, day } = getDatePartsInTimeZone(new Date());
 
     const employees = await prisma.employee.findMany({
       where: {
@@ -138,7 +137,8 @@ export const sendBirthdayEmailToEmployee = async (employeeId: string, allowResen
     return { success: false, error: 'Employee not found' };
   }
 
-  if (!employee.isActive || !matchesBirthday(employee.dateOfBirth, new Date().getMonth(), new Date().getDate())) {
+  const { month, day } = getDatePartsInTimeZone(new Date());
+  if (!employee.isActive || !matchesBirthday(employee.dateOfBirth, month, day)) {
     return { success: false, error: 'Employee is inactive or does not have a birthday today' };
   }
 

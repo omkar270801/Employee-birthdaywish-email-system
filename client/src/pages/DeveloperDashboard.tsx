@@ -46,6 +46,26 @@ interface LogEntry {
   message: string;
 }
 
+interface EmailActivity {
+  id: string;
+  createdAt: string;
+  status: string;
+  recipientEmail: string;
+  subject: string;
+  employee: { name: string; email: string };
+}
+
+const formatTimestamp = (value: string, timeZone: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    timeZone,
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).format(new Date(value));
+
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     connected: 'badge-success',
@@ -71,17 +91,19 @@ export function DeveloperDashboard() {
   const [scheduler, setScheduler] = useState<SchedulerData | null>(null);
   const [statistics, setStatistics] = useState<StatisticsData | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [recentActivity, setRecentActivity] = useState<EmailActivity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const loadData = async () => {
     try {
-      const [statusRes, healthRes, schedulerRes, statsRes, logsRes] = await Promise.all([
+      const [statusRes, healthRes, schedulerRes, statsRes, logsRes, activityRes] = await Promise.all([
         api.developer.getStatus(),
         api.developer.getHealth(),
         api.developer.getScheduler(),
         api.developer.getStatistics(),
         api.developer.getLogs(),
+        api.developer.getRecentActivity(),
       ]);
 
       setServerStatus(statusRes.data);
@@ -89,6 +111,7 @@ export function DeveloperDashboard() {
       setScheduler(schedulerRes.data);
       setStatistics(statsRes.data);
       setLogs(logsRes.data.logs);
+      setRecentActivity(activityRes.data);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -128,52 +151,45 @@ export function DeveloperDashboard() {
         <p className="text-sm text-slate-400 mt-1">System monitoring and diagnostics</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="card p-5 border-slate-700 bg-slate-800">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl border border-emerald-700 bg-emerald-900/30 flex items-center justify-center text-2xl">
-              🟢
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-400">Server Status</p>
-              <p className="text-2xl font-bold text-white mt-0.5">{serverStatus ? 'Online' : 'Unknown'}</p>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="card border-slate-700 bg-slate-800">
+          <div className="px-6 py-4 border-b border-slate-700">
+            <h2 className="text-lg font-semibold text-white">Next Run</h2>
+          </div>
+          <div className="p-6">
+            <p className="text-2xl font-semibold text-white">
+              {scheduler?.nextRun ? `${formatTimestamp(scheduler.nextRun, 'Asia/Kolkata')} IST` : 'Not scheduled'}
+            </p>
+            <p className="text-sm text-slate-400 mt-2">
+              {scheduler?.checkTime ? `Daily check at ${scheduler.checkTime} IST` : 'Check time not configured'}
+            </p>
           </div>
         </div>
 
-        <div className="card p-5 border-slate-700 bg-slate-800">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl border border-indigo-700 bg-indigo-900/30 flex items-center justify-center text-2xl">
-              📊
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-400">Uptime</p>
-              <p className="text-2xl font-bold text-white mt-0.5">{serverStatus ? formatUptime(serverStatus.uptime) : 'Unknown'}</p>
-            </div>
+        <div className="card border-slate-700 bg-slate-800">
+          <div className="px-6 py-4 border-b border-slate-700">
+            <h2 className="text-lg font-semibold text-white">Recent Activity</h2>
           </div>
-        </div>
-
-        <div className="card p-5 border-slate-700 bg-slate-800">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl border border-blue-700 bg-blue-900/30 flex items-center justify-center text-2xl">
-              🗄️
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-400">Database</p>
-              <p className="text-sm font-bold text-white mt-0.5">{health ? <StatusBadge status={health.services.database.status} /> : 'Unknown'}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="card p-5 border-slate-700 bg-slate-800">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl border border-pink-700 bg-pink-900/30 flex items-center justify-center text-2xl">
-              📧
-            </div>
-            <div>
-              <p className="text-sm font-medium text-slate-400">Email Service</p>
-              <p className="text-sm font-bold text-white mt-0.5">{health ? <StatusBadge status={health.services.email.status} /> : 'Unknown'}</p>
-            </div>
+          <div className="p-4">
+            {recentActivity.length === 0 ? (
+              <p className="text-sm text-slate-500">No email activity available</p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto scrollbar-thin">
+                {recentActivity.map(activity => (
+                  <div key={activity.id} className="flex items-start justify-between gap-4 rounded-lg bg-slate-700/30 p-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{activity.employee.name}</p>
+                      <p className="text-xs text-slate-400 truncate">{activity.recipientEmail}</p>
+                      <p className="text-xs text-slate-500 mt-1 truncate">{activity.subject}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <StatusBadge status={activity.status.toLowerCase()} />
+                      <p className="text-xs text-slate-500 mt-2">{new Date(activity.createdAt).toLocaleString()}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -198,7 +214,11 @@ export function DeveloperDashboard() {
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-slate-400">Last Updated</span>
-              <span className="text-sm font-medium text-white">{serverStatus ? new Date(serverStatus.timestamp).toLocaleString() : 'Unknown'}</span>
+              <span className="text-sm font-medium text-white text-right">
+                {serverStatus
+                  ? <>{formatTimestamp(serverStatus.timestamp, 'UTC')} UTC<br />{formatTimestamp(serverStatus.timestamp, 'Asia/Kolkata')} IST</>
+                  : 'Unknown'}
+              </span>
             </div>
           </div>
         </div>
@@ -244,11 +264,11 @@ export function DeveloperDashboard() {
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-slate-400">Check Time</span>
-              <span className="text-sm font-medium text-white">{scheduler?.checkTime || 'Not configured'}</span>
+              <span className="text-sm font-medium text-white">{scheduler?.checkTime ? `${scheduler.checkTime} IST` : 'Not configured'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-slate-400">Last Run</span>
-              <span className="text-sm font-medium text-white">{scheduler?.lastRun ? new Date(scheduler.lastRun).toLocaleString() : 'Never'}</span>
+              <span className="text-sm font-medium text-white">{scheduler?.lastRun ? `${formatTimestamp(scheduler.lastRun, 'Asia/Kolkata')} IST` : 'Never'}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="text-sm text-slate-400">Last Result</span>

@@ -4,25 +4,31 @@ import * as emailService from '../services/email.service';
 import * as templateService from '../services/template.service';
 import { AuthRequest } from '../middleware/auth';
 import ExcelJS from 'exceljs';
+import { createUtcDateOnly } from '../utils/timezone';
 
 const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 const parseDateOnly = (value: string): Date | null => {
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) return null;
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  return date.getFullYear() === Number(match[1]) && date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[3])
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = createUtcDateOnly(year, month, day);
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
     ? date
     : null;
 };
 
+const createDateOfBirth = (year: number, month: number, day: number): Date => createUtcDateOnly(year, month + 1, day);
+
 const parseUploadDate = (value: unknown): Date | null => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+    return createDateOfBirth(value.getFullYear(), value.getMonth(), value.getDate());
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
     const date = new Date(new Date(1899, 11, 30).getTime() + value * 24 * 60 * 60 * 1000);
-    return Number.isNaN(date.getTime()) ? null : new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    return Number.isNaN(date.getTime()) ? null : createDateOfBirth(date.getFullYear(), date.getMonth(), date.getDate());
   }
   if (typeof value !== 'string') return null;
 
@@ -32,8 +38,8 @@ const parseUploadDate = (value: unknown): Date | null => {
     const day = Number(dmy[1]);
     const month = Number(dmy[2]);
     const year = Number(dmy[3]);
-    const date = new Date(year, month - 1, day);
-    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
+    const date = createUtcDateOnly(year, month, day);
+    return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? date : null;
   }
   return parseDateOnly(text);
 };

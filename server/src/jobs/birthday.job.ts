@@ -1,5 +1,6 @@
 import { birthdayJob } from '../services/birthday.service';
 import { updateSchedulerState, setSchedulerRunning, schedulerState } from '../services/developer-metrics';
+import { getNextIstRun } from '../utils/timezone';
 
 export const runBirthdayJob = async () => {
   return birthdayJob();
@@ -18,18 +19,13 @@ export const startScheduler = () => {
 
   const scheduleNextRun = () => {
     const now = new Date();
-    const scheduled = new Date();
-    scheduled.setHours(hours, minutes, 0, 0);
-
-    if (scheduled <= now) {
-      scheduled.setDate(scheduled.getDate() + 1);
-    }
+    const scheduled = getNextIstRun(hours, minutes, now);
 
     schedulerState.nextRun = scheduled.toISOString();
     setSchedulerRunning(true);
 
     const delay = scheduled.getTime() - now.getTime();
-    console.log(`Next birthday job scheduled at ${scheduled.toISOString()}`);
+    console.log(`Next birthday job scheduled at ${scheduled.toISOString()} (UTC)`);
 
     setTimeout(async () => {
       console.log('Running scheduled birthday job...');

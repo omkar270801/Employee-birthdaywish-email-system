@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { prisma } from '../utils/prisma';
+import { getIstDayBounds } from '../utils/timezone';
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -57,13 +58,12 @@ export const sendBirthdayEmail = async (
   template: { id: string; subject: string; body: string },
   allowResend = false
 ) => {
-  const today = new Date();
-  const birthdayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const { start: birthdayDate, end: nextBirthdayDate } = getIstDayBounds();
 
   const existingLog = await prisma.emailLog.findFirst({
     where: {
       employeeId: employee.id,
-      birthdayDate,
+      birthdayDate: { gte: birthdayDate, lt: nextBirthdayDate },
     },
   });
 

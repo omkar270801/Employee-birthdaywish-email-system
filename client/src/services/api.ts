@@ -160,5 +160,6 @@ export const api = {
     getScheduler: () => request('/developer/scheduler', {}, 'developerToken'),
     getStatistics: () => request('/developer/statistics', {}, 'developerToken'),
     getLogs: (limit?: number) => request(`/developer/logs${limit ? `?limit=${limit}` : ''}`, {}, 'developerToken'),
+    getRecentActivity: () => request('/developer/recent-activity', {}, 'developerToken'),
   },
 };

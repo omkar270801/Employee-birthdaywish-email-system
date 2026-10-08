@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../utils/prisma';
+import { createUtcDateOnly, getDatePartsInTimeZone, getIstDayBounds } from '../utils/timezone';
 
 export const getAllEmployees = (filters?: { department?: string; isActive?: boolean; search?: string }) => {
   const where: Prisma.EmployeeWhereInput = {};
@@ -59,14 +60,12 @@ export const getDepartments = async () => {
 };
 
 const matchesBirthday = (dateOfBirth: Date, targetMonth: number, targetDay: number): boolean => {
-  const dob = new Date(dateOfBirth);
-  return dob.getMonth() === targetMonth && dob.getDate() === targetDay;
+  const dob = getDatePartsInTimeZone(dateOfBirth);
+  return dob.month === targetMonth && dob.day === targetDay;
 };
 
 export const getTodayBirthdays = async () => {
-  const today = new Date();
-  const month = today.getMonth();
-  const day = today.getDate();
+  const { month, day } = getDatePartsInTimeZone(new Date());
 
   const employees = await prisma.employee.findMany({
     where: {
@@ -90,7 +89,7 @@ export const getUpcomingBirthdays = async (days: number = 7) => {
     throw new RangeError('days must be an integer between 1 and 90');
   }
 
-  const today = new Date();
+  const { start } = getIstDayBounds();
   const results: Array<{ employee: any; date: Date }> = [];
 
   const employees = await prisma.employee.findMany({
@@ -108,14 +107,12 @@ export const getUpcomingBirthdays = async (days: number = 7) => {
   });
 
   for (let i = 0; i < days; i++) {
-    const checkDate = new Date(today);
-    checkDate.setDate(today.getDate() + i);
-    const month = checkDate.getMonth();
-    const day = checkDate.getDate();
+    const checkDate = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
+    const { year, month, day } = getDatePartsInTimeZone(checkDate);
 
     const birthdays = employees.filter(emp => matchesBirthday(emp.dateOfBirth, month, day));
     birthdays.forEach(emp => {
-      results.push({ employee: emp, date: new Date(checkDate) });
+      results.push({ employee: emp, date: createUtcDateOnly(year, month, day) });
     });
   }
 

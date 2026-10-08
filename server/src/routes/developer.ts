@@ -6,6 +6,7 @@ import {
   getSchedulerController,
   getStatisticsController,
   getLogsController,
+  getRecentActivityController,
 } from '../controllers/developer.controller';
 import { authenticateDeveloper } from '../middleware/developer-auth';
 import { loginRateLimit } from '../middleware/login-rate-limit';
@@ -21,5 +22,6 @@ router.get('/health', getHealthController);
 router.get('/scheduler', getSchedulerController);
 router.get('/statistics', getStatisticsController);
 router.get('/logs', getLogsController);
+router.get('/recent-activity', getRecentActivityController);
 
 export default router;

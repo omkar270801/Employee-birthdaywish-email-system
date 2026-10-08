@@ -5,6 +5,7 @@ import { DeveloperRequest } from '../middleware/developer-auth';
 import { prisma } from '../utils/prisma';
 import { verifyEmailService } from '../services/email.service';
 import { schedulerState, appLogs } from '../services/developer-metrics';
+import { getIstDayBounds } from '../utils/timezone';
 
 export const developerLoginController = async (req: DeveloperRequest, res: Response) => {
   const { email, password } = req.body;
@@ -108,9 +109,7 @@ export const getStatisticsController = async (req: DeveloperRequest, res: Respon
       prisma.emailTemplate.count(),
     ]);
 
-    const today = new Date();
-    const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const tomorrowStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const { start: todayStart, end: tomorrowStart } = getIstDayBounds();
 
     const [todaySent, todayFailed] = await Promise.all([
       prisma.emailLog.count({
@@ -156,4 +155,27 @@ export const getLogsController = async (req: DeveloperRequest, res: Response) =>
       total: appLogs.length,
     },
   });
+};
+
+export const getRecentActivityController = async (req: DeveloperRequest, res: Response) => {
+  try {
+    const logs = await prisma.emailLog.findMany({
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        createdAt: true,
+        status: true,
+        recipientEmail: true,
+        subject: true,
+        employee: {
+          select: { name: true, email: true },
+        },
+      },
+    });
+
+    res.json({ success: true, data: logs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Unable to load recent email activity' });
+  }
 };
