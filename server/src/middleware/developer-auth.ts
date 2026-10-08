@@ -14,7 +14,7 @@ export const authenticateDeveloper = (req: DeveloperRequest, res: Response, next
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const decoded = jwt.verify(token, process.env.DEVELOPER_JWT_SECRET!) as any;
     if (decoded.type !== 'developer') {
       return res.status(403).json({ message: 'Invalid token type' });
     }

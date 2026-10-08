@@ -47,11 +47,16 @@ export const birthdayJob = async () => {
     let failed = 0;
 
     for (const employee of birthdayEmployees) {
-      const result = await sendBirthdayEmail(employee, template);
-      if (result.success) {
-        sent++;
-      } else {
+      try {
+        const result = await sendBirthdayEmail(employee, template);
+        if (result.success) {
+          sent++;
+        } else {
+          failed++;
+        }
+      } catch (error) {
         failed++;
+        console.error(`Birthday email failed for employee ${employee.id}:`, error);
       }
     }
 
@@ -106,13 +111,16 @@ export const getEmailHistory = async (filters?: {
 };
 
 export const deleteEmailLog = async (logId: string) => {
-  await prisma.emailLog.delete({
-    where: { id: logId },
-  });
+  const log = await prisma.emailLog.findUnique({ where: { id: logId }, select: { status: true } });
+  if (!log) return { success: false, reason: 'Email log not found' };
+  if (log.status === 'SENT' || log.status === 'PROCESSING') {
+    return { success: false, reason: 'Successful or in-progress send records cannot be deleted' };
+  }
+  await prisma.emailLog.delete({ where: { id: logId } });
   return { success: true };
 };
 
-export const sendBirthdayEmailToEmployee = async (employeeId: string) => {
+export const sendBirthdayEmailToEmployee = async (employeeId: string, allowResend = false) => {
   const employee = await prisma.employee.findUnique({
     where: { id: employeeId },
     select: {
@@ -122,6 +130,7 @@ export const sendBirthdayEmailToEmployee = async (employeeId: string) => {
       department: true,
       designation: true,
       dateOfBirth: true,
+      isActive: true,
     },
   });
 
@@ -129,11 +138,15 @@ export const sendBirthdayEmailToEmployee = async (employeeId: string) => {
     return { success: false, error: 'Employee not found' };
   }
 
+  if (!employee.isActive || !matchesBirthday(employee.dateOfBirth, new Date().getMonth(), new Date().getDate())) {
+    return { success: false, error: 'Employee is inactive or does not have a birthday today' };
+  }
+
   const template = await getActiveTemplate();
   if (!template) {
     return { success: false, error: 'No active email template found' };
   }
 
-  const result = await sendBirthdayEmail(employee, template);
+  const result = await sendBirthdayEmail(employee, template, allowResend);
   return result;
 };

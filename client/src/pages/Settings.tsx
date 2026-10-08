@@ -103,7 +103,7 @@ export function Settings({ isDeveloper = false }: { isDeveloper?: boolean }) {
         </div>
       )}
 
-      <div className="card p-6 border-red-200">
+      {!isDeveloper && <div className="card p-6 border-red-200">
         <h2 className="text-lg font-semibold text-red-900 mb-2">Database Cleanup</h2>
         <p className="text-sm text-red-700 mb-4">
           Permanently delete old records from the database. This action cannot be undone.
@@ -145,7 +145,7 @@ export function Settings({ isDeveloper = false }: { isDeveloper?: boolean }) {
             {cleanupLoading ? 'Cleaning up...' : 'Run Cleanup'}
           </button>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

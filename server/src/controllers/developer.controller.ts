@@ -6,37 +6,8 @@ import { prisma } from '../utils/prisma';
 import { verifyEmailService } from '../services/email.service';
 import { schedulerState, appLogs } from '../services/developer-metrics';
 
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
-const MAX_ATTEMPTS = 5;
-const WINDOW_MS = 15 * 60 * 1000;
-
-const checkRateLimit = (key: string): boolean => {
-  const now = Date.now();
-  const attempt = loginAttempts.get(key);
-
-  if (!attempt || now - attempt.lastAttempt > WINDOW_MS) {
-    loginAttempts.set(key, { count: 1, lastAttempt: now });
-    return true;
-  }
-
-  if (attempt.count >= MAX_ATTEMPTS) {
-    return false;
-  }
-
-  attempt.count++;
-  attempt.lastAttempt = now;
-  return true;
-};
-
 export const developerLoginController = async (req: DeveloperRequest, res: Response) => {
   const { email, password } = req.body;
-
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
-  const rateLimitKey = `${ip}:${email}`;
-
-  if (!checkRateLimit(rateLimitKey)) {
-    return res.status(429).json({ message: 'Too many login attempts. Please try again later.' });
-  }
 
   const isValid = verifyDeveloperCredentials(email, password);
 

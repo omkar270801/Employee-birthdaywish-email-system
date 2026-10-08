@@ -14,7 +14,11 @@ export const getTodayBirthdaysCtrl = async (req: AuthRequest, res: Response) => 
 
 export const getUpcomingBirthdaysCtrl = async (req: AuthRequest, res: Response) => {
   try {
-    const days = parseInt(req.query.days as string) || 7;
+    const rawDays = req.query.days;
+    const days = rawDays === undefined ? 7 : Number(rawDays);
+    if (!Number.isInteger(days) || days < 1 || days > 90) {
+      return res.status(400).json({ success: false, message: 'days must be an integer between 1 and 90' });
+    }
     const birthdays = await getUpcomingBirthdays(days);
     res.json({ success: true, data: birthdays });
   } catch (error: any) {
@@ -34,8 +38,15 @@ export const triggerBirthdayJobCtrl = async (req: AuthRequest, res: Response) =>
 export const sendEmailToEmployeeCtrl = async (req: AuthRequest, res: Response) => {
   try {
     const { employeeId } = req.params;
-    const result = await sendBirthdayEmailToEmployee(employeeId);
-    res.json({ success: result.success, message: result.success ? 'Email sent successfully' : result.error, data: result });
+    if (req.body?.resend !== undefined && typeof req.body.resend !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'resend must be a boolean' });
+    }
+    const result = await sendBirthdayEmailToEmployee(employeeId, req.body?.resend === true);
+    res.json({
+      success: result.success,
+      message: result.success ? 'Email sent successfully' : result.error || ('reason' in result ? result.reason : undefined),
+      data: result,
+    });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -8,8 +8,8 @@ export interface DeveloperTokenPayload {
 export const generateDeveloperToken = (email: string): string => {
   return jwt.sign(
     { email, type: 'developer' },
-    process.env.JWT_SECRET!,
-    { expiresIn: '7d' }
+    process.env.DEVELOPER_JWT_SECRET!,
+    { expiresIn: '8h' }
   );
 };
 

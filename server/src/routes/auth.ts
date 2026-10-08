@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { loginController, seedAdminController } from '../controllers/auth.controller';
-import { validate, body } from '../middleware/validate';
+import { loginController } from '../controllers/auth.controller';
+import { body } from '../middleware/validate';
+import { loginRateLimit } from '../middleware/login-rate-limit';
 
 const router = Router();
 
@@ -19,7 +20,6 @@ const asyncValidate = async (req: Request, res: Response, next: NextFunction) =>
   next();
 };
 
-router.post('/login', loginValidation, asyncValidate, loginController);
-router.post('/seed', seedAdminController);
+router.post('/login', loginRateLimit, loginValidation, asyncValidate, loginController);
 
 export default router;

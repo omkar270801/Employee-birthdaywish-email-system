@@ -8,10 +8,11 @@ import {
   getLogsController,
 } from '../controllers/developer.controller';
 import { authenticateDeveloper } from '../middleware/developer-auth';
+import { loginRateLimit } from '../middleware/login-rate-limit';
 
 const router = Router();
 
-router.post('/login', developerLoginController);
+router.post('/login', loginRateLimit, developerLoginController);
 
 router.use(authenticateDeveloper);
 

@@ -1,5 +1,10 @@
 const API_BASE = '/api';
 
+function handleUnauthorized(tokenKey: string) {
+  localStorage.removeItem(tokenKey);
+  window.dispatchEvent(new CustomEvent('auth:expired', { detail: { tokenKey } }));
+}
+
 async function request(endpoint: string, options: RequestInit = {}, tokenKey = 'token') {
   const token = localStorage.getItem(tokenKey);
 
@@ -23,6 +28,9 @@ async function request(endpoint: string, options: RequestInit = {}, tokenKey = '
   }
 
   if (!response.ok) {
+    if (response.status === 401 && token) {
+      handleUnauthorized(tokenKey);
+    }
     throw new Error(data.message || `HTTP ${response.status}`);
   }
 
@@ -72,7 +80,15 @@ export const api = {
       }).then(async res => {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
-          return res.json();
+          return res.json().then(data => {
+            if (!res.ok) {
+                if (res.status === 401 && token) {
+                  handleUnauthorized('token');
+                }
+              throw new Error(data.message || `HTTP ${res.status}`);
+            }
+            return data;
+          });
         }
         throw new Error(res.statusText || 'Upload failed');
       });
@@ -99,7 +115,10 @@ export const api = {
     getToday: () => request('/birthdays/today'),
     getUpcoming: (days?: number) => request(`/birthdays/upcoming?days=${days || 7}`),
     trigger: () => request('/birthdays/send', { method: 'POST' }),
-    sendToEmployee: (employeeId: string) => request(`/birthdays/send/${employeeId}`, { method: 'POST' }),
+    sendToEmployee: (employeeId: string, resend = false) => request(`/birthdays/send/${employeeId}`, {
+      method: 'POST',
+      body: JSON.stringify({ resend }),
+    }),
   },
 
   emails: {

@@ -21,7 +21,10 @@ export const getEmailHistoryCtrl = async (req: AuthRequest, res: Response) => {
 
 export const deleteEmailLogCtrl = async (req: AuthRequest, res: Response) => {
   try {
-    await deleteEmailLog(req.params.id);
+    const result = await deleteEmailLog(req.params.id);
+    if (!result.success) {
+      return res.status(result.reason === 'Email log not found' ? 404 : 409).json(result);
+    }
     res.json({ success: true, message: 'Email log deleted successfully' });
   } catch (error: any) {
     res.status(500).json({ success: false, message: error.message });

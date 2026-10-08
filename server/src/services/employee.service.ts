@@ -86,6 +86,10 @@ export const getTodayBirthdays = async () => {
 };
 
 export const getUpcomingBirthdays = async (days: number = 7) => {
+  if (!Number.isInteger(days) || days < 1 || days > 90) {
+    throw new RangeError('days must be an integer between 1 and 90');
+  }
+
   const today = new Date();
   const results: Array<{ employee: any; date: Date }> = [];
 

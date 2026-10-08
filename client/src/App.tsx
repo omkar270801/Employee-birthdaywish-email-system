@@ -30,6 +30,17 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [isDeveloperAuthenticated, setIsDeveloperAuthenticated] = useState(!!localStorage.getItem('developerToken'));
 
+  useEffect(() => {
+    const handleAuthExpired = (event: Event) => {
+      const tokenKey = (event as CustomEvent<{ tokenKey: string }>).detail?.tokenKey;
+      if (tokenKey === 'token') setIsAuthenticated(false);
+      if (tokenKey === 'developerToken') setIsDeveloperAuthenticated(false);
+    };
+
+    window.addEventListener('auth:expired', handleAuthExpired);
+    return () => window.removeEventListener('auth:expired', handleAuthExpired);
+  }, []);
+
   const handleLogin = () => {
     setIsAuthenticated(true);
   };

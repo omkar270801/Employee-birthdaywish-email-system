@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../utils/prisma';
 
@@ -16,7 +16,7 @@ export const login = async (email: string, password: string) => {
   const token = jwt.sign(
     { id: user.id, email: user.email, role: user.role },
     process.env.JWT_SECRET!,
-    { expiresIn: '7d' }
+    { expiresIn: '8h' }
   );
 
   return {
@@ -28,19 +28,4 @@ export const login = async (email: string, password: string) => {
       role: user.role,
     },
   };
-};
-
-export const seedAdmin = async () => {
-  const hashedPassword = await bcrypt.hash('admin123', 10);
-  await prisma.user.upsert({
-    where: { email: 'admin@iim.ac.in' },
-    update: { password: hashedPassword },
-    create: {
-      email: 'admin@iim.ac.in',
-      password: hashedPassword,
-      name: 'Admin User',
-      role: 'ADMIN',
-    },
-  });
-  console.log('Admin user ensured: admin@iim.ac.in / admin123');
 };

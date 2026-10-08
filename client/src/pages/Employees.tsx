@@ -9,6 +9,8 @@ export function Employees() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [resendAfterSave, setResendAfterSave] = useState(false);
+  const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -38,11 +40,24 @@ export function Employees() {
       const payload = { ...formData, department: 'General' };
       if (editingEmployee) {
         await api.employees.update(editingEmployee.id, payload);
+        if (resendAfterSave) {
+          const response = await api.birthdays.sendToEmployee(editingEmployee.id, true);
+          setNotice({
+            type: response.success ? 'success' : 'error',
+            text: response.success
+              ? 'Employee updated and birthday email resent.'
+              : `Employee updated, but email resend failed: ${response.message || 'Unknown error'}`,
+          });
+        } else {
+          setNotice({ type: 'success', text: 'Employee updated.' });
+        }
       } else {
         await api.employees.create(payload);
+        setNotice({ type: 'success', text: 'Employee created.' });
       }
       setShowModal(false);
       setEditingEmployee(null);
+      setResendAfterSave(false);
       resetForm();
       loadEmployees();
     } catch (err: any) {
@@ -52,6 +67,7 @@ export function Employees() {
 
   const handleEdit = (emp: Employee) => {
     setEditingEmployee(emp);
+    setResendAfterSave(false);
     setFormData({
       name: emp.name,
       email: emp.email,
@@ -101,6 +117,13 @@ export function Employees() {
     });
   };
 
+  const isBirthdayToday = () => {
+    if (!formData.dateOfBirth) return false;
+    const [, month, day] = formData.dateOfBirth.split('-').map(Number);
+    const today = new Date();
+    return month === today.getMonth() + 1 && day === today.getDate();
+  };
+
   const filteredEmployees = employees.filter(emp => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
@@ -147,6 +170,12 @@ export function Employees() {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div className={`px-4 py-3 rounded-lg text-sm ${notice.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+          {notice.text}
         </div>
       )}
 
@@ -275,6 +304,17 @@ export function Employees() {
                 />
                 <label htmlFor="isActive" className="text-sm text-slate-700">Active</label>
               </div>
+              {editingEmployee && formData.isActive && isBirthdayToday() && (
+                <label className="flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={resendAfterSave}
+                    onChange={e => setResendAfterSave(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                  />
+                  <span>Resend birthday email with the updated details after saving</span>
+                </label>
+              )}
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">
                   Cancel

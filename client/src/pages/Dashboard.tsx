@@ -24,11 +24,11 @@ export function Dashboard() {
     }
   };
 
-  const handleSendEmail = async (employeeId: string) => {
+  const handleSendEmail = async (employeeId: string, resend = false) => {
     setSendingId(employeeId);
     setMessage(null);
     try {
-      const response = await api.birthdays.sendToEmployee(employeeId);
+      const response = await api.birthdays.sendToEmployee(employeeId, resend);
       setMessage({ type: response.success ? 'success' : 'error', text: response.message || (response.success ? 'Email sent' : 'Failed to send email') });
       await loadStats();
     } catch (err: any) {
@@ -101,8 +101,8 @@ export function Dashboard() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                       <button
-                        onClick={() => handleSendEmail(emp.id)}
-                        disabled={sendingId === emp.id || emp.emailStatus === 'SENT'}
+                        onClick={() => handleSendEmail(emp.id, emp.emailStatus === 'SENT' || emp.emailStatus === 'FAILED')}
+                        disabled={sendingId === emp.id || emp.emailStatus === 'PROCESSING'}
                         className="btn-primary btn-sm disabled:opacity-50"
                       >
                         {sendingId === emp.id ? (
@@ -113,7 +113,7 @@ export function Dashboard() {
                             </svg>
                             Sending...
                           </span>
-                        ) : emp.emailStatus === 'SENT' ? 'Sent' : 'Send Email'}
+                        ) : emp.emailStatus === 'SENT' ? 'Resend Email' : emp.emailStatus === 'FAILED' ? 'Retry Email' : 'Send Email'}
                       </button>
                     </td>
                   </tr>
@@ -156,7 +156,7 @@ function StatusBadge({ status }: { status: string }) {
     FAILED: 'badge-danger',
     'Not Sent': 'badge-warning',
   };
-  const label = status === 'SENT' ? 'Sent' : status === 'FAILED' ? 'Not Sent' : 'Not Sent';
+  const label = status === 'SENT' ? 'Sent' : status === 'FAILED' ? 'Failed' : status === 'PROCESSING' ? 'Sending' : 'Not Sent';
   return (
     <span className={`badge ${styles[status] || 'badge-info'}`}>
       {label}

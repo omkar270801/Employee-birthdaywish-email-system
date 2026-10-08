@@ -17,8 +17,16 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as AuthRequest['user'];
-    req.user = decoded;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload;
+    if (decoded.type === 'developer' || typeof decoded.id !== 'string' || typeof decoded.email !== 'string' || decoded.role !== 'ADMIN') {
+      return res.status(403).json({ message: 'Administrator access required' });
+    }
+
+    req.user = {
+      id: decoded.id as string,
+      email: decoded.email as string,
+      role: decoded.role as string,
+    };
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Invalid or expired token' });

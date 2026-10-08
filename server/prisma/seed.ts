@@ -1,21 +1,32 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const hashedPassword = await bcrypt.hash('admin123', 10);
-  await prisma.user.upsert({
-    where: { email: 'admin@iim.ac.in' },
-    update: {},
-    create: {
-      email: 'admin@iim.ac.in',
+  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD;
+  if (!email || !password || password.length < 12) {
+    throw new Error('Set ADMIN_EMAIL and an ADMIN_PASSWORD of at least 12 characters before seeding');
+  }
+
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    console.log(`Admin account ${email} already exists; leaving it unchanged.`);
+    return;
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 12);
+  await prisma.user.create({
+    data: {
+      email,
       password: hashedPassword,
       name: 'Admin User',
       role: 'ADMIN',
     },
   });
-  console.log('Admin user created: admin@iim.ac.in / admin123');
+  console.log(`Admin account ${email} created.`);
 }
 
 main()

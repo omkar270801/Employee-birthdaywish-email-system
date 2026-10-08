@@ -43,8 +43,8 @@ export const cleanupDatabase = async (req: AuthRequest, res: Response) => {
   try {
     const { type, olderThanDays } = req.body;
 
-    if (!type || !olderThanDays) {
-      return res.status(400).json({ success: false, message: 'Type and olderThanDays are required' });
+    if (!['email_logs', 'inactive_employees', 'all_logs'].includes(type) || !Number.isInteger(olderThanDays) || olderThanDays < 1 || olderThanDays > 36500) {
+      return res.status(400).json({ success: false, message: 'Provide a valid cleanup type and an olderThanDays value between 1 and 36,500' });
     }
 
     const cutoffDate = new Date();

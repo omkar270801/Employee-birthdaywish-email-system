@@ -3,8 +3,40 @@ import * as employeeService from '../services/employee.service';
 import * as emailService from '../services/email.service';
 import * as templateService from '../services/template.service';
 import { AuthRequest } from '../middleware/auth';
-import { validate, body } from '../middleware/validate';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+
+const isValidEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
+const parseDateOnly = (value: string): Date | null => {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return date.getFullYear() === Number(match[1]) && date.getMonth() === Number(match[2]) - 1 && date.getDate() === Number(match[3])
+    ? date
+    : null;
+};
+
+const parseUploadDate = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const date = new Date(new Date(1899, 11, 30).getTime() + value * 24 * 60 * 60 * 1000);
+    return Number.isNaN(date.getTime()) ? null : new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+  if (typeof value !== 'string') return null;
+
+  const text = value.trim();
+  const dmy = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null;
+  }
+  return parseDateOnly(text);
+};
 
 export const getEmployees = async (req: AuthRequest, res: Response) => {
   try {
@@ -34,7 +66,13 @@ export const getEmployee = async (req: AuthRequest, res: Response) => {
 
 export const createEmployee = async (req: AuthRequest, res: Response) => {
   try {
-    const { name, email, designation, dateOfBirth } = req.body;
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const designation = typeof req.body?.designation === 'string' ? req.body.designation.trim() : '';
+    const dateOfBirth = typeof req.body?.dateOfBirth === 'string' ? parseDateOnly(req.body.dateOfBirth) : null;
+    if (!name || name.length > 200 || !isValidEmail(email) || !designation || designation.length > 200 || !dateOfBirth) {
+      return res.status(400).json({ success: false, message: 'Provide a valid name, email, designation, and YYYY-MM-DD date of birth' });
+    }
 
     const existingEmail = await employeeService.getEmployeeByEmail(email);
     if (existingEmail) {
@@ -46,7 +84,7 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
       email,
       department: 'General',
       designation,
-      dateOfBirth: new Date(dateOfBirth),
+      dateOfBirth,
     });
 
     res.status(201).json({ success: true, data: employee });
@@ -62,21 +100,58 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ success: false, message: 'Employee not found' });
     }
 
-    const { email, ...updateData } = req.body;
+    const input = req.body && typeof req.body === 'object' ? req.body : {};
+    const allowedFields = ['name', 'email', 'designation', 'dateOfBirth', 'isActive', 'department'];
+    if (Object.keys(input).some(field => !allowedFields.includes(field))) {
+      return res.status(400).json({ success: false, message: 'Unsupported employee field' });
+    }
 
-    if (email && email !== employee.email) {
-      const existingEmail = await employeeService.getEmployeeByEmail(email);
+    const updateData: Record<string, unknown> = {};
+    if (input.name !== undefined) {
+      if (typeof input.name !== 'string' || !input.name.trim() || input.name.trim().length > 200) {
+        return res.status(400).json({ success: false, message: 'Name must be 1 to 200 characters' });
+      }
+      updateData.name = input.name.trim();
+    }
+    if (input.email !== undefined) {
+      if (typeof input.email !== 'string' || !isValidEmail(input.email.trim())) {
+        return res.status(400).json({ success: false, message: 'Provide a valid email address' });
+      }
+      updateData.email = input.email.trim().toLowerCase();
+    }
+    if (input.designation !== undefined) {
+      if (typeof input.designation !== 'string' || !input.designation.trim() || input.designation.trim().length > 200) {
+        return res.status(400).json({ success: false, message: 'Designation must be 1 to 200 characters' });
+      }
+      updateData.designation = input.designation.trim();
+    }
+    if (input.dateOfBirth !== undefined) {
+      const dateOfBirth = typeof input.dateOfBirth === 'string' ? parseDateOnly(input.dateOfBirth) : null;
+      if (!dateOfBirth) return res.status(400).json({ success: false, message: 'Date of birth must be a real YYYY-MM-DD date' });
+      updateData.dateOfBirth = dateOfBirth;
+    }
+    if (input.isActive !== undefined) {
+      if (typeof input.isActive !== 'boolean') return res.status(400).json({ success: false, message: 'isActive must be a boolean' });
+      updateData.isActive = input.isActive;
+    }
+    if (input.department !== undefined) {
+      if (input.department !== null && (typeof input.department !== 'string' || input.department.length > 100)) {
+        return res.status(400).json({ success: false, message: 'Department must be at most 100 characters' });
+      }
+      updateData.department = input.department;
+    }
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one employee field is required' });
+    }
+
+    if (updateData.email && updateData.email !== employee.email) {
+      const existingEmail = await employeeService.getEmployeeByEmail(updateData.email as string);
       if (existingEmail) {
         return res.status(400).json({ success: false, message: 'Email already exists' });
       }
     }
 
-    const updated = await employeeService.updateEmployee(req.params.id, {
-      ...updateData,
-      ...(email && { email }),
-      department: 'General',
-      ...(req.body.dateOfBirth && { dateOfBirth: new Date(req.body.dateOfBirth) }),
-    });
+    const updated = await employeeService.updateEmployee(req.params.id, updateData);
 
     res.json({ success: true, data: updated });
   } catch (error: any) {
@@ -99,11 +174,22 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
-    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const workbook = new ExcelJS.Workbook();
+    const workbookBuffer = Buffer.from(req.file.buffer) as unknown as Parameters<typeof workbook.xlsx.load>[0];
+    await workbook.xlsx.load(workbookBuffer);
     const requestedSheet = req.body.sheetName;
-    const sheetName = requestedSheet && workbook.Sheets[requestedSheet] ? requestedSheet : workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const rawData = XLSX.utils.sheet_to_json(sheet, { raw: false }) as Record<string, any>[];
+    const worksheet = requestedSheet ? workbook.getWorksheet(requestedSheet) : workbook.worksheets[0];
+    if (!worksheet) {
+      return res.status(400).json({ success: false, message: 'Selected sheet was not found' });
+    }
+    const sheetRows: unknown[][] = [];
+    worksheet.eachRow({ includeEmpty: false }, row => {
+      sheetRows.push((row.values as unknown[]).slice(1));
+    });
+    const headerKeys = (sheetRows[0] || []).map((value, index) => String(value ?? `__EMPTY_${index}`));
+    const rawData = sheetRows.slice(1).map(row => Object.fromEntries(
+      headerKeys.map((header, index) => [header, row[index]])
+    ));
 
     const normalize = (value: string) =>
       String(value || '')
@@ -118,6 +204,9 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
 
     if (!filteredData.length) {
       return res.status(400).json({ success: false, message: 'Excel file is empty' });
+    }
+    if (filteredData.length > 5000) {
+      return res.status(400).json({ success: false, message: 'Excel file may contain at most 5,000 employee rows' });
     }
 
     // Find the actual header row by looking for common header patterns
@@ -173,6 +262,11 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
       }
     });
 
+    const missingHeaders = ['name', 'dob', 'email', 'designation'].filter(key => !headerMap[key]);
+    if (missingHeaders.length) {
+      return res.status(400).json({ success: false, message: `Missing required columns: ${missingHeaders.join(', ')}` });
+    }
+
     const errors: string[] = [];
     const validEmployees: any[] = [];
     let duplicateCount = 0;
@@ -191,53 +285,14 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
 
       const hasExplicitEmail = rawEmail !== undefined && rawEmail !== null && String(rawEmail).trim() !== '';
       const cleanedEmail = email.toLowerCase().replace(/[\s\u00A0]+/g, '').trim();
-      const hasValidEmail = cleanedEmail.includes('@');
-
-      let dobDate: Date | null = null;
-
-      if (dobRaw === undefined || dobRaw === null || String(dobRaw).trim() === '') {
-        // Allow missing DOB - set to null
-        dobDate = null;
-      } else if (dobRaw instanceof Date) {
-        dobDate = new Date(dobRaw);
-      } else if (typeof dobRaw === 'number') {
-        const excelEpoch = new Date(1899, 11, 30);
-        dobDate = new Date(excelEpoch.getTime() + dobRaw * 24 * 60 * 60 * 1000);
-      } else {
-        const dobString = String(dobRaw).trim();
-        const ddmmyyyy = dobString.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-        if (ddmmyyyy) {
-          const day = parseInt(ddmmyyyy[1], 10);
-          const month = parseInt(ddmmyyyy[2], 10);
-          const year = parseInt(ddmmyyyy[3], 10);
-          if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-            dobDate = new Date(year, month - 1, day);
-          }
-        }
-        if (!dobDate || isNaN(dobDate.getTime())) {
-          const parsed = new Date(dobString);
-          if (!isNaN(parsed.getTime())) {
-            dobDate = parsed;
-          }
-        }
-        if (!dobDate || isNaN(dobDate.getTime())) {
-          // Allow invalid DOB format - set to null
-          dobDate = null;
-        }
-      }
-
-      let finalName = name;
-      let finalEmail = cleanedEmail;
-
-      if (!finalName && !hasValidEmail) {
-        // If both name and email are missing, skip the row
+      const hasValidEmail = isValidEmail(cleanedEmail);
+      const dobDate = parseUploadDate(dobRaw);
+      if (!name || name.length > 200 || !designation || designation.length > 200 || !hasValidEmail || cleanedEmail.length > 320 || !dobDate) {
+        errors.push(`Row ${rowNumber}: Name, valid email, designation, and valid date of birth are required`);
         continue;
-      } else if (!finalName && hasValidEmail) {
-        finalName = cleanedEmail.split('@')[0];
-      } else if (finalName && !hasValidEmail) {
-        // Generate placeholder email if name exists but email is missing
-        finalEmail = `${finalName.toLowerCase().replace(/[^a-z0-9]+/g, '.')}@unknown.local`;
       }
+      const finalName = name;
+      const finalEmail = cleanedEmail;
 
       if (hasExplicitEmail && seenEmails.has(finalEmail)) {
         errors.push(`Row ${rowNumber}: Duplicate email in file`);
@@ -266,8 +321,8 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
     }
 
     if (validEmployees.length > 0) {
-      await employeeService.bulkCreateEmployees(validEmployees);
-      addedCount = validEmployees.length;
+      const result = await employeeService.bulkCreateEmployees(validEmployees);
+      addedCount = result.count;
     }
 
     return res.json({

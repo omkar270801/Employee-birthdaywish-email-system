@@ -84,6 +84,7 @@ export function EmailHistory() {
               onChange={e => setFilters({ ...filters, status: e.target.value })}
             >
               <option value="">All</option>
+              <option value="PROCESSING">PROCESSING</option>
               <option value="SENT">SENT</option>
               <option value="FAILED">FAILED</option>
             </select>
@@ -125,7 +126,7 @@ export function EmailHistory() {
                       {log.subject}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`badge ${log.status === 'SENT' ? 'badge-success' : 'badge-danger'}`}>
+                      <span className={`badge ${log.status === 'SENT' ? 'badge-success' : log.status === 'FAILED' ? 'badge-danger' : 'bg-amber-100 text-amber-800'}`}>
                         {log.status}
                       </span>
                     </td>
@@ -136,9 +137,11 @@ export function EmailHistory() {
                       {log.errorMessage || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      <button onClick={() => handleDelete(log.id)} className="text-red-600 hover:text-red-900 font-medium">
-                        Delete
-                      </button>
+                      {log.status === 'FAILED' && (
+                        <button onClick={() => handleDelete(log.id)} className="text-red-600 hover:text-red-900 font-medium">
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

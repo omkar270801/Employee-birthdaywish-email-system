@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
 import { api } from '../services/api';
-import * as XLSX from 'xlsx';
 
 export function UploadEmployees() {
   const [file, setFile] = useState<File | null>(null);
@@ -19,17 +18,25 @@ export function UploadEmployees() {
     setSheetName('');
 
     if (selected) {
-      const reader = new FileReader();
-      reader.onload = (evt) => {
+      if (selected.size > 5 * 1024 * 1024 || !selected.name.toLowerCase().endsWith('.xlsx')) {
+        setFile(null);
+        setError('Select an .xlsx file no larger than 5 MB');
+        setSheets([]);
+        return;
+      }
+      void (async () => {
         try {
-          const wb = XLSX.read(evt.target?.result as ArrayBuffer, { type: 'array' });
-          setSheets(wb.SheetNames);
-          setSheetName(wb.SheetNames[0] || '');
+          const { default: ExcelJS } = await import('exceljs');
+          const workbook = new ExcelJS.Workbook();
+          await workbook.xlsx.load(await selected.arrayBuffer());
+          const names = workbook.worksheets.map(sheet => sheet.name);
+          setSheets(names);
+          setSheetName(names[0] || '');
         } catch {
           setSheets([]);
+          setError('The selected file is not a valid .xlsx workbook');
         }
-      };
-      reader.readAsArrayBuffer(selected);
+      })();
     } else {
       setSheets([]);
     }
@@ -53,16 +60,25 @@ export function UploadEmployees() {
     }
   };
 
-  const downloadTemplate = () => {
+  const downloadTemplate = async () => {
     const template = [
       ['Name', 'Designation', 'DOB', 'Email'],
       ['Rahul Sharma', 'Professor', '15/08/1990', 'rahul@example.com'],
       ['Priya Patil', 'Assistant Professor', '22/08/1988', 'priya@example.com'],
     ];
-    const ws = XLSX.utils.aoa_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Employees');
-    XLSX.writeFile(wb, 'employee_template.xlsx');
+    const { default: ExcelJS } = await import('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Employees');
+    worksheet.addRows(template);
+    const contents = await workbook.xlsx.writeBuffer();
+    const url = URL.createObjectURL(new Blob([contents as BlobPart], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'employee_template.xlsx';
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -117,7 +133,7 @@ export function UploadEmployees() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xlsx,.xls"
+              accept=".xlsx"
               onChange={handleFileChange}
               className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
             />

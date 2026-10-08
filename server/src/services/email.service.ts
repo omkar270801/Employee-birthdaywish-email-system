@@ -51,10 +51,11 @@ export const sendBirthdayEmail = async (
     id: string;
     name: string;
     email: string;
-    department: string;
+    department: string | null;
     designation: string;
   },
-  template: { id: string; subject: string; body: string }
+  template: { id: string; subject: string; body: string },
+  allowResend = false
 ) => {
   const today = new Date();
   const birthdayDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -66,12 +67,11 @@ export const sendBirthdayEmail = async (
     },
   });
 
-  if (existingLog && existingLog.status === 'SENT') {
-    return { success: false, reason: 'Email already sent today' };
-  }
-
-  if (existingLog) {
-    return { success: false, reason: 'Email already sent today' };
+  if (existingLog && (!allowResend || !['SENT', 'FAILED'].includes(existingLog.status))) {
+    return {
+      success: false,
+      reason: existingLog.status === 'PROCESSING' ? 'Email is already being processed' : 'Email already sent today',
+    };
   }
 
   const trimmedDesignation = (employee.designation || '').trim();
@@ -82,26 +82,92 @@ export const sendBirthdayEmail = async (
   const subject = template.subject
     .replace(/\{\{employeeName\}\}/g, employee.name)
     .replace(/\{\{name\}\}/g, employee.name)
-    .replace(/\{\{department\}\}/g, employee.department)
+    .replace(/\{\{department\}\}/g, employee.department || '')
     .replace(/\{\{designation\}\}/g, employee.designation)
     .replace(/\{\{greeting\}\}/g, greeting);
 
   const body = template.body
     .replace(/\{\{employeeName\}\}/g, employee.name)
     .replace(/\{\{name\}\}/g, employee.name)
-    .replace(/\{\{department\}\}/g, employee.department)
+    .replace(/\{\{department\}\}/g, employee.department || '')
     .replace(/\{\{designation\}\}/g, employee.designation)
     .replace(/\{\{greeting\}\}/g, greeting);
 
-  const result = await sendEmail(employee.email, subject, body);
+  let log;
+  if (existingLog) {
+    if (!allowResend || !['SENT', 'FAILED'].includes(existingLog.status)) {
+      return { success: false, reason: existingLog.status === 'PROCESSING' ? 'Email is already being processed' : 'Email already sent today' };
+    }
 
-  const log = await prisma.emailLog.create({
+    const claimed = await prisma.emailLog.updateMany({
+      where: { id: existingLog.id, status: existingLog.status },
+      data: {
+        status: 'PROCESSING',
+        templateId: template.id,
+        recipientEmail: employee.email,
+        subject,
+        sentAt: null,
+        errorMessage: null,
+      },
+    });
+    if (claimed.count === 0) {
+      return { success: false, reason: 'Email is already being processed' };
+    }
+
+    log = await prisma.emailLog.findUniqueOrThrow({ where: { id: existingLog.id } });
+  } else {
+    try {
+      log = await prisma.emailLog.create({
+        data: {
+          employeeId: employee.id,
+          templateId: template.id,
+          birthdayDate,
+          recipientEmail: employee.email,
+          subject,
+          status: 'PROCESSING',
+        },
+      });
+    } catch (error) {
+      if (!error || typeof error !== 'object' || !('code' in error) || error.code !== 'P2002') {
+        throw error;
+      }
+
+      const conflictingLog = await prisma.emailLog.findUnique({
+        where: { employeeId_birthdayDate: { employeeId: employee.id, birthdayDate } },
+      });
+      if (!conflictingLog || (conflictingLog.status === 'SENT' && !allowResend)) {
+        return { success: false, reason: 'Email already sent today' };
+      }
+
+      const staleAttemptBefore = new Date(Date.now() - 15 * 60 * 1000);
+      const claimableStatuses = [
+        { status: 'FAILED' },
+        { status: 'PROCESSING', updatedAt: { lt: staleAttemptBefore } },
+        ...(allowResend ? [{ status: 'SENT' }] : []),
+      ];
+      const claimed = await prisma.emailLog.updateMany({
+        where: { id: conflictingLog.id, OR: claimableStatuses },
+        data: {
+          status: 'PROCESSING',
+          templateId: template.id,
+          recipientEmail: employee.email,
+          subject,
+          sentAt: null,
+          errorMessage: null,
+        },
+      });
+      if (claimed.count === 0) {
+        return { success: false, reason: 'Email is already being processed' };
+      }
+
+      log = await prisma.emailLog.findUniqueOrThrow({ where: { id: conflictingLog.id } });
+    }
+  }
+
+  const result = await sendEmail(employee.email, subject, body);
+  log = await prisma.emailLog.update({
+    where: { id: log.id },
     data: {
-      employeeId: employee.id,
-      templateId: template.id,
-      birthdayDate,
-      recipientEmail: employee.email,
-      subject,
       status: result.success ? 'SENT' : 'FAILED',
       sentAt: result.success ? new Date() : null,
       errorMessage: result.error || null,
