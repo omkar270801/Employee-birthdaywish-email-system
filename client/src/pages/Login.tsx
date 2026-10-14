@@ -46,7 +46,6 @@ export function Login({ onLogin }: LoginProps) {
               <span className="text-3xl">🎂</span>
             </div>
             <h2 className="text-2xl font-bold text-slate-900">BirthdayWish Desk</h2>
-            <p className="mt-1 text-sm text-slate-500">Admin Login</p>
           </div>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
@@ -64,7 +63,6 @@ export function Login({ onLogin }: LoginProps) {
                 className="input"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="admin@iim.ac.in"
                 autoComplete="off"
                 name="loginEmail"
               />
