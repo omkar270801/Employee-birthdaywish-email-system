@@ -41,6 +41,7 @@ export interface EmailLog {
     name: string;
     email: string;
     department: string;
+    designation: string;
   };
   template?: {
     name: string;

@@ -26,16 +26,6 @@ export function EmailHistory() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this email log?')) return;
-    try {
-      await api.emails.delete(id);
-      setLogs(logs.filter(log => log.id !== id));
-    } catch (err: any) {
-      alert(err.message);
-    }
-  };
-
   const clearFilters = () => {
     setFilters({ startDate: '', endDate: '', status: '' });
   };
@@ -103,13 +93,12 @@ export function EmailHistory() {
               <thead className="bg-slate-50/50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Employee</th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Designation</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Email</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Birthday</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Subject</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Sent At</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Error</th>
-                  <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -117,6 +106,9 @@ export function EmailHistory() {
                   <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                       {log.employee?.name || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                      {log.employee?.designation || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{log.recipientEmail}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
@@ -133,21 +125,11 @@ export function EmailHistory() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                       {log.sentAt ? new Date(log.sentAt).toLocaleString() : '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-red-600 max-w-xs truncate" title={log.errorMessage || undefined}>
-                      {log.errorMessage || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      {log.status === 'FAILED' && (
-                        <button onClick={() => handleDelete(log.id)} className="text-red-600 hover:text-red-900 font-medium">
-                          Delete
-                        </button>
-                      )}
-                    </td>
                   </tr>
                 ))}
                 {logs.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
                       No email history found
                     </td>
                   </tr>

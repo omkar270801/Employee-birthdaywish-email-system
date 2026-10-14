@@ -96,6 +96,7 @@ export const getEmailHistory = async (filters?: {
           name: true,
           email: true,
           department: true,
+          designation: true,
         },
       },
       template: {
