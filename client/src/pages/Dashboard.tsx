@@ -2,6 +2,24 @@ import { useEffect, useState } from 'react';
 import { api } from '../services/api';
 import { DashboardStats, UpcomingBirthday } from '../types';
 
+const IST_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Kolkata',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+const getIstDayNumber = (date: Date) => {
+  const parts = IST_DATE_FORMATTER.formatToParts(date);
+  const year = Number(parts.find(part => part.type === 'year')?.value);
+  const month = Number(parts.find(part => part.type === 'month')?.value);
+  const day = Number(parts.find(part => part.type === 'day')?.value);
+  return Date.UTC(year, month - 1, day) / 86400000;
+};
+
+const getBirthdayDayNumber = (date: Date) =>
+  Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 86400000;
+
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [upcomingBirthdays, setUpcomingBirthdays] = useState<UpcomingBirthday[]>([]);
@@ -31,15 +49,10 @@ export function Dashboard() {
   const loadUpcomingBirthdays = async () => {
     try {
       const response = await api.birthdays.getUpcoming(8);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      const nextWeek = new Date(today);
-      nextWeek.setDate(nextWeek.getDate() + 8);
+      const today = getIstDayNumber(new Date());
       setUpcomingBirthdays(response.data.filter((birthday: UpcomingBirthday) => {
-        const birthdayDate = new Date(birthday.date);
-        return birthdayDate >= tomorrow && birthdayDate < nextWeek;
+        const birthdayDay = getBirthdayDayNumber(new Date(birthday.date));
+        return birthdayDay > today && birthdayDay < today + 8;
       }));
     } catch (err: any) {
       setUpcomingError(err.message || 'Unable to load upcoming birthdays');
@@ -178,22 +191,20 @@ export function Dashboard() {
           <ul className="divide-y divide-slate-100">
             {upcomingBirthdays.map(({ employee, date }) => {
               const birthdayDate = new Date(date);
-              const today = new Date();
-              today.setHours(0, 0, 0, 0);
-              const daysAway = Math.round((birthdayDate.getTime() - today.getTime()) / 86400000);
+              const daysAway = getBirthdayDayNumber(birthdayDate) - getIstDayNumber(new Date());
 
               return (
                 <li key={`${employee.id}-${date}`} className="flex items-center gap-4 px-6 py-4 transition-colors hover:bg-slate-50/70">
                   <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-lg border border-indigo-100 bg-indigo-50 text-indigo-700">
-                    <span className="text-[10px] font-bold uppercase">{birthdayDate.toLocaleDateString(undefined, { month: 'short' })}</span>
-                    <span className="text-xl font-bold leading-5">{birthdayDate.getDate()}</span>
+                    <span className="text-[10px] font-bold uppercase">{birthdayDate.toLocaleDateString(undefined, { month: 'short', timeZone: 'UTC' })}</span>
+                    <span className="text-xl font-bold leading-5">{birthdayDate.getUTCDate()}</span>
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-slate-900">{employee.name}</p>
                     <p className="mt-1 truncate text-sm text-slate-500">{employee.designation || employee.department || employee.email}</p>
                   </div>
                   <div className="shrink-0 text-right">
-                    <p className="text-sm font-medium text-slate-700">{birthdayDate.toLocaleDateString(undefined, { weekday: 'long' })}</p>
+                    <p className="text-sm font-medium text-slate-700">{birthdayDate.toLocaleDateString(undefined, { weekday: 'long', timeZone: 'UTC' })}</p>
                     <p className="mt-1 text-xs text-slate-500">{daysAway === 1 ? 'Tomorrow' : `In ${daysAway} days`}</p>
                   </div>
                 </li>
