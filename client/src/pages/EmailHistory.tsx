@@ -95,7 +95,6 @@ export function EmailHistory() {
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Employee</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Designation</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Birthday</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Subject</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
                   <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Sent At</th>
@@ -111,9 +110,6 @@ export function EmailHistory() {
                       {log.employee?.designation || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{log.recipientEmail}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                      {new Date(log.birthdayDate).toLocaleDateString()}
-                    </td>
                     <td className="px-6 py-4 text-sm text-slate-500 max-w-xs truncate" title={log.subject}>
                       {log.subject}
                     </td>
@@ -129,7 +125,7 @@ export function EmailHistory() {
                 ))}
                 {logs.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                       No email history found
                     </td>
                   </tr>
