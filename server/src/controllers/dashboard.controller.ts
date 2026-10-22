@@ -21,7 +21,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
     });
 
     const todayBirthdayEmployees = allActiveEmployees.filter(emp =>
-      matchesBirthday(emp.dateOfBirth, month, day)
+      emp.dateOfBirth !== null && matchesBirthday(emp.dateOfBirth, month, day)
     );
 
     const todayBirthdays = todayBirthdayEmployees.map(emp => ({ ...emp, emailStatus: 'Not Sent' }));

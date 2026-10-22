@@ -70,9 +70,9 @@ export function Employees() {
     setResendAfterSave(false);
     setFormData({
       name: emp.name,
-      email: emp.email,
-      designation: emp.designation,
-      dateOfBirth: emp.dateOfBirth.split('T')[0],
+      email: emp.email || '',
+      designation: emp.designation || '',
+      dateOfBirth: emp.dateOfBirth?.split('T')[0] || '',
       isActive: emp.isActive,
     });
     setShowModal(true);
@@ -128,7 +128,7 @@ export function Employees() {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return true;
 
-    return [emp.name, emp.email, emp.designation].some(value =>
+    return [emp.name, emp.email || '', emp.designation || ''].some(value =>
       value.toLowerCase().includes(query)
     );
   });
@@ -207,10 +207,10 @@ export function Employees() {
               {filteredEmployees.map(emp => (
                 <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{emp.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{emp.email}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{emp.designation}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{emp.email || '-'}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{emp.designation || '-'}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                    {new Date(emp.dateOfBirth).toLocaleDateString()}
+                    {emp.dateOfBirth ? new Date(emp.dateOfBirth).toLocaleDateString() : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`badge ${emp.isActive ? 'badge-success' : 'badge-danger'}`}>

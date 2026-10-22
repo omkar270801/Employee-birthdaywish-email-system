@@ -46,7 +46,7 @@ Set production values. Do not leave example credentials in place:
 
 ```env
 NODE_ENV=production
-DATABASE_URL="postgresql://birthdayapp:<url-encoded-password>@127.0.0.1:5432/birthday_wish_db?schema=public"
+DATABASE_URL="postgresql://birthdayapp:<url-encoded-password>@127.0.0.1:5432/birthday_wish_db?schema=public&connection_limit=5"
 JWT_SECRET="<unique-random-secret-at-least-32-characters>"
 CLIENT_URL="https://birthdays.example.org"
 PORT=5001

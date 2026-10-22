@@ -29,7 +29,10 @@ export const birthdayJob = async () => {
       },
     });
 
-    const birthdayEmployees = employees.filter(emp => matchesBirthday(emp.dateOfBirth, month, day));
+    const birthdayEmployees = employees.filter(
+      (emp): emp is typeof emp & { email: string; dateOfBirth: Date } =>
+        emp.email !== null && emp.dateOfBirth !== null && matchesBirthday(emp.dateOfBirth, month, day)
+    );
 
     if (birthdayEmployees.length === 0) {
       console.log('No birthdays today.');
@@ -139,7 +142,8 @@ export const sendBirthdayEmailToEmployee = async (employeeId: string, allowResen
   }
 
   const { month, day } = getDatePartsInTimeZone(new Date());
-  if (!employee.isActive || !matchesBirthday(employee.dateOfBirth, month, day)) {
+  const email = employee.email;
+  if (!employee.isActive || !email || !employee.dateOfBirth || !matchesBirthday(employee.dateOfBirth, month, day)) {
     return { success: false, error: 'Employee is inactive or does not have a birthday today' };
   }
 
@@ -148,6 +152,6 @@ export const sendBirthdayEmailToEmployee = async (employeeId: string, allowResen
     return { success: false, error: 'No active email template found' };
   }
 
-  const result = await sendBirthdayEmail(employee, template, allowResend);
+  const result = await sendBirthdayEmail({ ...employee, email }, template, allowResend);
   return result;
 };

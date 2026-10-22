@@ -1,0 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const developer_controller_1 = require("../controllers/developer.controller");
+const developer_auth_1 = require("../middleware/developer-auth");
+const login_rate_limit_1 = require("../middleware/login-rate-limit");
+const router = (0, express_1.Router)();
+router.post('/login', login_rate_limit_1.loginRateLimit, developer_controller_1.developerLoginController);
+router.use(developer_auth_1.authenticateDeveloper);
+router.get('/status', developer_controller_1.getDeveloperStatusController);
+router.get('/health', developer_controller_1.getHealthController);
+router.get('/scheduler', developer_controller_1.getSchedulerController);
+router.get('/statistics', developer_controller_1.getStatisticsController);
+router.get('/logs', developer_controller_1.getLogsController);
+router.get('/recent-activity', developer_controller_1.getRecentActivityController);
+exports.default = router;

@@ -53,7 +53,7 @@ export const sendBirthdayEmail = async (
     name: string;
     email: string;
     department: string | null;
-    designation: string;
+    designation: string | null;
   },
   template: { id: string; subject: string; body: string },
   allowResend = false
@@ -83,14 +83,14 @@ export const sendBirthdayEmail = async (
     .replace(/\{\{employeeName\}\}/g, employee.name)
     .replace(/\{\{name\}\}/g, employee.name)
     .replace(/\{\{department\}\}/g, employee.department || '')
-    .replace(/\{\{designation\}\}/g, employee.designation)
+    .replace(/\{\{designation\}\}/g, employee.designation || '')
     .replace(/\{\{greeting\}\}/g, greeting);
 
   const body = template.body
     .replace(/\{\{employeeName\}\}/g, employee.name)
     .replace(/\{\{name\}\}/g, employee.name)
     .replace(/\{\{department\}\}/g, employee.department || '')
-    .replace(/\{\{designation\}\}/g, employee.designation)
+    .replace(/\{\{designation\}\}/g, employee.designation || '')
     .replace(/\{\{greeting\}\}/g, greeting);
 
   let log;

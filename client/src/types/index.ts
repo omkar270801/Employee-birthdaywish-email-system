@@ -8,9 +8,9 @@ export interface User {
 export interface Employee {
   id: string;
   name: string;
-  email: string;
-  designation: string;
-  dateOfBirth: string;
+  email: string | null;
+  designation: string | null;
+  dateOfBirth: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -39,9 +39,9 @@ export interface EmailLog {
   createdAt: string;
   employee?: {
     name: string;
-    email: string;
-    department: string;
-    designation: string;
+    email: string | null;
+    department: string | null;
+    designation: string | null;
   };
   template?: {
     name: string;
@@ -53,9 +53,9 @@ export interface DashboardStats {
   todayBirthdays: Array<{
     id: string;
     name: string;
-    email: string;
-    designation: string;
-    dateOfBirth: string;
+    email: string | null;
+    designation: string | null;
+    dateOfBirth: string | null;
     emailStatus: string;
   }>;
   todayEmailsSent: number;
@@ -67,9 +67,9 @@ export interface UpcomingBirthday {
   employee: {
     id: string;
     name: string;
-    email: string;
+    email: string | null;
     department: string;
-    designation: string;
+    designation: string | null;
     dateOfBirth: string;
   };
   date: string;

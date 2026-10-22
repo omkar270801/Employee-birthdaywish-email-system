@@ -129,9 +129,9 @@ export function Dashboard() {
                   <tr key={emp.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{emp.name}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{emp.designation || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{emp.email}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{emp.email || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                      {new Date(emp.dateOfBirth).toLocaleDateString()}
+                      {emp.dateOfBirth ? new Date(emp.dateOfBirth).toLocaleDateString() : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <StatusBadge status={emp.emailStatus} />
@@ -139,7 +139,7 @@ export function Dashboard() {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                       <button
                         onClick={() => handleSendEmail(emp.id, emp.emailStatus === 'SENT' || emp.emailStatus === 'FAILED')}
-                        disabled={sendingId === emp.id || emp.emailStatus === 'PROCESSING'}
+                        disabled={sendingId === emp.id || emp.emailStatus === 'PROCESSING' || !emp.email}
                         className="btn-primary btn-sm disabled:opacity-50"
                       >
                         {sendingId === emp.id ? (

@@ -22,13 +22,34 @@ const parseDateOnly = (value: string): Date | null => {
 
 const createDateOfBirth = (year: number, month: number, day: number): Date => createUtcDateOnly(year, month + 1, day);
 
+// ExcelJS returns objects for formulas, rich text, and hyperlinks. Unwrap those
+// values before validating/importing so they aren't treated as "[object Object]".
+const getCellValue = (value: unknown): unknown => {
+  if (value && typeof value === 'object' && !(value instanceof Date)) {
+    const cell = value as { result?: unknown; text?: unknown; richText?: Array<{ text?: unknown }> };
+    if ('result' in cell) return cell.result;
+    if (Array.isArray(cell.richText)) return cell.richText.map(part => part.text ?? '').join('');
+    if (typeof cell.text === 'string') return cell.text;
+  }
+  return value;
+};
+
+const displayCellValue = (value: unknown): string => {
+  const unwrapped = getCellValue(value);
+  return unwrapped === undefined || unwrapped === null ? '' : String(unwrapped).trim();
+};
+
 const parseUploadDate = (value: unknown): Date | null => {
+  value = getCellValue(value);
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return createDateOfBirth(value.getFullYear(), value.getMonth(), value.getDate());
+    // ExcelJS dates represent the calendar date in UTC. Using local getters can
+    // shift the birthday by a day on servers in time zones west of UTC.
+    return createDateOfBirth(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate());
   }
   if (typeof value === 'number' && Number.isFinite(value)) {
-    const date = new Date(new Date(1899, 11, 30).getTime() + value * 24 * 60 * 60 * 1000);
-    return Number.isNaN(date.getTime()) ? null : createDateOfBirth(date.getFullYear(), date.getMonth(), date.getDate());
+    const wholeDays = Math.floor(value);
+    const date = new Date(Date.UTC(1899, 11, 30 + wholeDays));
+    return Number.isNaN(date.getTime()) ? null : createDateOfBirth(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
   }
   if (typeof value !== 'string') return null;
 
@@ -188,14 +209,13 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
     if (!worksheet) {
       return res.status(400).json({ success: false, message: 'Selected sheet was not found' });
     }
-    const sheetRows: unknown[][] = [];
+    const sheetRows: Array<{ rowNumber: number; values: unknown[] }> = [];
     worksheet.eachRow({ includeEmpty: false }, row => {
-      sheetRows.push((row.values as unknown[]).slice(1));
+      sheetRows.push({
+        rowNumber: row.number,
+        values: Array.from({ length: worksheet.columnCount }, (_, index) => row.getCell(index + 1).value),
+      });
     });
-    const headerKeys = (sheetRows[0] || []).map((value, index) => String(value ?? `__EMPTY_${index}`));
-    const rawData = sheetRows.slice(1).map(row => Object.fromEntries(
-      headerKeys.map((header, index) => [header, row[index]])
-    ));
 
     const normalize = (value: string) =>
       String(value || '')
@@ -203,16 +223,8 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
         .replace(/[\s_\-]+/g, ' ')
         .trim();
 
-    const filteredData = rawData.filter(row => {
-      const values = Object.values(row || {});
-      return values.some(value => value !== undefined && value !== null && String(value).trim() !== '');
-    });
-
-    if (!filteredData.length) {
+    if (!sheetRows.length) {
       return res.status(400).json({ success: false, message: 'Excel file is empty' });
-    }
-    if (filteredData.length > 5000) {
-      return res.status(400).json({ success: false, message: 'Excel file may contain at most 5,000 employee rows' });
     }
 
     // Find the actual header row by looking for common header patterns
@@ -224,10 +236,8 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
     ];
 
     let headerRowIndex = -1;
-    for (let i = 0; i < Math.min(filteredData.length, 10); i++) {
-      const row = filteredData[i];
-      const headers = Object.keys(row || {});
-      const normalizedHeaders = headers.map(h => normalize(h));
+    for (let i = 0; i < Math.min(sheetRows.length, 10); i++) {
+      const normalizedHeaders = sheetRows[i].values.map(value => normalize(displayCellValue(value)));
       
       // Check if this row has at least 2 columns that match our header aliases
       const matchCount = normalizedHeaders.filter(h => 
@@ -244,31 +254,28 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Could not find valid header row in Excel file' });
     }
 
-    // Extract data rows (skip the header row and any rows before it)
-    const dataRows = filteredData.slice(headerRowIndex + 1);
-
-    const headerMap: Record<string, string> = {};
-    const rawHeaders = Object.keys(filteredData[headerRowIndex] || {});
+    const headerMap: Record<string, number> = {};
+    const rawHeaders = sheetRows[headerRowIndex].values;
 
     const nameAliases = ['name', 'full name', 'employee name', 'employee', 'staff name', 'person name', 'name of the employee', 'name of employee', 'emp name'];
     const dobAliases = ['dob', 'date of birth', 'birth date', 'dateofbirth', 'dob date', 'birthdate', 'birth day', 'date of birth', 'birthday', 'date'];
     const emailAliases = ['email', 'email id', 'e-mail', 'mail', 'email address', 'e mail', 'emailid', 'email id'];
     const designationAliases = ['designation', 'designation ', 'job title', 'position', 'role', 'job role', 'designation name', 'job'];
 
-    rawHeaders.forEach(header => {
-      const key = normalize(header);
-      if (!headerMap['name'] && nameAliases.some(alias => key === alias || key.includes(alias))) {
-        headerMap['name'] = header;
-      } else if (!headerMap['dob'] && dobAliases.some(alias => key === alias || key.includes(alias))) {
-        headerMap['dob'] = header;
-      } else if (!headerMap['email'] && emailAliases.some(alias => key === alias || key.includes(alias))) {
-        headerMap['email'] = header;
-      } else if (!headerMap['designation'] && designationAliases.some(alias => key === alias || key.includes(alias))) {
-        headerMap['designation'] = header;
+    rawHeaders.forEach((header, index) => {
+      const key = normalize(displayCellValue(header));
+      if (headerMap['name'] === undefined && nameAliases.some(alias => key === alias || key.includes(alias))) {
+        headerMap['name'] = index;
+      } else if (headerMap['dob'] === undefined && dobAliases.some(alias => key === alias || key.includes(alias))) {
+        headerMap['dob'] = index;
+      } else if (headerMap['email'] === undefined && emailAliases.some(alias => key === alias || key.includes(alias))) {
+        headerMap['email'] = index;
+      } else if (headerMap['designation'] === undefined && designationAliases.some(alias => key === alias || key.includes(alias))) {
+        headerMap['designation'] = index;
       }
     });
 
-    const missingHeaders = ['name', 'dob', 'email', 'designation'].filter(key => !headerMap[key]);
+    const missingHeaders = ['name'].filter(key => headerMap[key] === undefined);
     if (missingHeaders.length) {
       return res.status(400).json({ success: false, message: `Missing required columns: ${missingHeaders.join(', ')}` });
     }
@@ -278,39 +285,41 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
     let duplicateCount = 0;
     let addedCount = 0;
     const seenEmails = new Set<string>();
+    const dataRows = sheetRows.filter(row => row.rowNumber > sheetRows[headerRowIndex].rowNumber);
+    if (dataRows.length > 5000) {
+      return res.status(400).json({ success: false, message: 'Excel file may contain at most 5,000 employee rows' });
+    }
 
-    for (let i = 0; i < dataRows.length; i++) {
-      const row = dataRows[i];
-      const rowNumber = i + headerRowIndex + 2; // Adjust for header row and 1-based indexing
+    for (const row of dataRows) {
+      const rowNumber = row.rowNumber;
 
-      const rawEmail = headerMap['email'] ? row[headerMap['email']] : undefined;
-      const email = headerMap['email'] ? String(rawEmail || '').trim() : '';
-      const name = headerMap['name'] ? String(row[headerMap['name']] || '').trim() : '';
-      const designation = headerMap['designation'] ? String(row[headerMap['designation']] || '').trim() : '';
-      const dobRaw = headerMap['dob'] ? row[headerMap['dob']] : undefined;
+      const rawEmail = row.values[headerMap['email']];
+      const email = displayCellValue(rawEmail);
+      const name = headerMap['name'] !== undefined ? displayCellValue(row.values[headerMap['name']]) : '';
+      const designation = headerMap['designation'] !== undefined ? displayCellValue(row.values[headerMap['designation']]) : '';
+      const dobRaw = row.values[headerMap['dob']];
 
-      const hasExplicitEmail = rawEmail !== undefined && rawEmail !== null && String(rawEmail).trim() !== '';
+      if (!name) continue;
+
       const cleanedEmail = email.toLowerCase().replace(/[\s\u00A0]+/g, '').trim();
-      const hasValidEmail = isValidEmail(cleanedEmail);
+      const normalizedEmail = isValidEmail(cleanedEmail) && cleanedEmail.length <= 320 ? cleanedEmail : null;
       const dobDate = parseUploadDate(dobRaw);
-      if (!name || name.length > 200 || !designation || designation.length > 200 || !hasValidEmail || cleanedEmail.length > 320 || !dobDate) {
-        errors.push(`Row ${rowNumber}: Name, valid email, designation, and valid date of birth are required`);
+      if (name.length > 200) {
+        errors.push(`Row ${rowNumber}: Name exceeds 200 characters`);
         continue;
       }
-      const finalName = name;
-      const finalEmail = cleanedEmail;
 
-      if (hasExplicitEmail && seenEmails.has(finalEmail)) {
+      if (normalizedEmail && seenEmails.has(normalizedEmail)) {
         errors.push(`Row ${rowNumber}: Duplicate email in file`);
         duplicateCount++;
         continue;
       }
 
-      if (hasExplicitEmail) {
-        seenEmails.add(finalEmail);
+      if (normalizedEmail) {
+        seenEmails.add(normalizedEmail);
       }
 
-      const existingEmail = await employeeService.getEmployeeByEmail(finalEmail);
+      const existingEmail = normalizedEmail ? await employeeService.getEmployeeByEmail(normalizedEmail) : null;
       if (existingEmail) {
         errors.push(`Row ${rowNumber}: Duplicate email in database`);
         duplicateCount++;
@@ -318,10 +327,10 @@ export const uploadEmployees = async (req: AuthRequest, res: Response) => {
       }
 
       validEmployees.push({
-        name: finalName,
-        email: finalEmail,
+        name,
+        email: normalizedEmail,
         department: 'General',
-        designation,
+        designation: designation || null,
         dateOfBirth: dobDate,
       });
     }

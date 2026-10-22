@@ -81,7 +81,7 @@ export const getTodayBirthdays = async () => {
     },
   });
 
-  return employees.filter(emp => matchesBirthday(emp.dateOfBirth, month, day));
+  return employees.filter(emp => emp.dateOfBirth !== null && matchesBirthday(emp.dateOfBirth, month, day));
 };
 
 export const getUpcomingBirthdays = async (days: number = 7) => {
@@ -110,7 +110,7 @@ export const getUpcomingBirthdays = async (days: number = 7) => {
     const checkDate = new Date(start.getTime() + i * 24 * 60 * 60 * 1000);
     const { year, month, day } = getDatePartsInTimeZone(checkDate);
 
-    const birthdays = employees.filter(emp => matchesBirthday(emp.dateOfBirth, month, day));
+    const birthdays = employees.filter(emp => emp.dateOfBirth !== null && matchesBirthday(emp.dateOfBirth, month, day));
     birthdays.forEach(emp => {
       results.push({ employee: emp, date: createUtcDateOnly(year, month, day) });
     });

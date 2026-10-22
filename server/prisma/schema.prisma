@@ -20,10 +20,10 @@ model User {
 model Employee {
   id           String     @id @default(cuid())
   name         String
-  email        String     @unique
+  email        String?    @unique
   department   String?    @default("General")
-  designation  String
-  dateOfBirth  DateTime
+  designation  String?
+  dateOfBirth  DateTime?
   isActive     Boolean    @default(true)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
